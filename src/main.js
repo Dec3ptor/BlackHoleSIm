@@ -123,6 +123,7 @@ function onStateChange(what) {
   if (what === 'preset') {
     applyPreset(state, state.preset);
     lensedCamera.fov = state.camera.fovDeg;
+    lensedCamera.updateProjectionMatrix();
     placeLensedCamera();
     panel.refresh();
   }
@@ -193,6 +194,7 @@ function doCapture() {
  * ------------------------------------------------------------------ */
 
 let last = performance.now();
+let ready = false;
 let smoothedFrame = 16;
 let sinceAdapt = 0;
 
@@ -221,6 +223,10 @@ function frame(now) {
   }
 
   composer.render();
+  if (!ready) {
+    ready = true;
+    document.getElementById('loading').hidden = true;
+  }
   if (pendingCapture) doCapture();
 
   // Adaptive resolution: trade pixels for frame rate, never the physics.
@@ -243,7 +249,6 @@ setView(state.view);
 resize();
 panel.refresh();
 hud.refresh();
-document.getElementById('loading').hidden = true;
 requestAnimationFrame(frame);
 
 // Handy for poking at the simulation from the console.
