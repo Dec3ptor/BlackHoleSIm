@@ -7,6 +7,12 @@ faked bending.
 
 **▶ [Open the simulator](https://dec3ptor.github.io/BlackHoleSIm/)**
 
+> **First-time setup:** the link above goes live once GitHub Pages is switched on for
+> this repository — **Settings → Pages → Build and deployment → Source → GitHub
+> Actions**. That is a one-off click that only a repository admin can make; the workflow
+> token is not allowed to do it. After that every push to the default branch deploys
+> automatically. Until then you can still run it locally (see below).
+
 ![The lensed view](assets/screenshot-lensed.png)
 
 ---
@@ -134,9 +140,9 @@ Then open <http://localhost:8080>. It needs a browser with WebGL 2.
 ### Deploying your own copy
 
 `.github/workflows/pages.yml` runs the test suite on every branch and publishes the
-default branch to GitHub Pages. In the repository settings, set **Pages → Build and
-deployment → Source** to **GitHub Actions** once, and every push to the default branch
-deploys.
+default branch to GitHub Pages — whatever that branch is called, so renaming it is safe.
+Set **Settings → Pages → Build and deployment → Source** to **GitHub Actions** once, then
+re-run the latest workflow; every later push deploys on its own.
 
 ## Controls
 
