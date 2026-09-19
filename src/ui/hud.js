@@ -7,6 +7,7 @@ import {
   hawkingTemperature, evaporationTime, eddingtonLuminosity, tidalAcceleration,
   orbitalPeriod, localOrbitalSpeed, staticTimeDilation,
   formatLength, formatTime, formatMass, L_SUN,
+  microarcsecPerRg, formatAngle,
 } from '../core/units.js';
 import { B_CRITICAL, R_ISCO } from '../core/geodesics.js';
 import { physicalDiscTemperature, particleInfo } from '../sim/simulation.js';
@@ -45,6 +46,7 @@ export function createHud(root, state) {
   line(gHole, 'mass', 'Mass');
   line(gHole, 'rs', 'Schwarzschild radius');
   line(gHole, 'shadow', 'Shadow diameter');
+  line(gHole, 'shadowAng', 'Shadow on the sky');
   line(gHole, 'isco', 'ISCO');
   line(gHole, 'iscoP', 'ISCO period');
   line(gHole, 'hawking', 'Hawking temperature');
@@ -91,6 +93,8 @@ export function createHud(root, state) {
     setv('mass', formatMass(M));
     setv('rs', formatLength(schwarzschildRadius(M)));
     setv('shadow', `${(2 * B_CRITICAL).toFixed(2)} r_g = ${formatLength(2 * B_CRITICAL * rg)}`);
+    const uasPerRg = microarcsecPerRg(M, state.distanceMpc);
+    setv('shadowAng', uasPerRg > 0 ? formatAngle(2 * B_CRITICAL * uasPerRg) : 'no distance set');
     setv('isco', `6 r_g = ${formatLength(R_ISCO * rg)}`);
     setv('iscoP', formatTime(orbitalPeriod(M, R_ISCO)));
     setv('hawking', `${hawkingTemperature(M).toExponential(2)} K`);

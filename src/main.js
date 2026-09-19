@@ -8,10 +8,13 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { BeamBlurShader, RadioColourShader } from './render/radioPasses.js';
 
 import { createBlackHoleView } from './render/blackHoleView.js';
 import { createSpacetimeView } from './render/spacetimeView.js';
 import { createState, advance, applyPreset, applyScenario, PRESETS } from './sim/simulation.js';
+import { microarcsecPerRg, M_SUN } from './core/units.js';
 import { buildPanel } from './ui/panel.js';
 import { createHud } from './ui/hud.js';
 
@@ -35,6 +38,7 @@ if (!renderer || !renderer.capabilities.isWebGL2) {
 }
 renderer.setSize(container.clientWidth, container.clientHeight, false);
 const TONE_MAPS = {
+  none: THREE.NoToneMapping,
   aces: THREE.ACESFilmicToneMapping,
   agx: THREE.AgXToneMapping,
   neutral: THREE.NeutralToneMapping,
@@ -97,9 +101,21 @@ const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(container.clientWidth, container.clientHeight), 0.75, 0.6, 0.85);
 const outputPass = new OutputPass();
 
+// Radio view only: convolve the intensity down to the array's beam, then
+// apply the false-colour map. Both sit idle for the optical views.
+const beamH = new ShaderPass(BeamBlurShader);
+const beamV = new ShaderPass(BeamBlurShader);
+const radioColour = new ShaderPass(RadioColourShader);
+beamH.material.uniforms.uTexel.value = new THREE.Vector2();
+beamV.material.uniforms.uTexel.value = new THREE.Vector2();
+beamH.enabled = beamV.enabled = radioColour.enabled = false;
+
 const composer = new EffectComposer(renderer);
 composer.addPass(renderPass);
 composer.addPass(bloomPass);
+composer.addPass(beamH);
+composer.addPass(beamV);
+composer.addPass(radioColour);
 composer.addPass(outputPass);
 
 const drawingSize = new THREE.Vector2();
@@ -131,6 +147,7 @@ function onStateChange(what) {
     lensedCamera.fov = state.camera.fovDeg;
     lensedCamera.updateProjectionMatrix();
     placeLensedCamera();
+    onStateChange('tone');
     panel.refresh();
   }
   if (what === 'scenario') applyScenario(state, state.scenario);
@@ -140,10 +157,8 @@ function onStateChange(what) {
     placeLensedCamera();
   }
   if (what === 'quality') resize();
-  if (what === 'tone') {
-    // OutputPass notices the change and rebuilds its defines by itself.
-    renderer.toneMapping = TONE_MAPS[state.toneMapping] ?? THREE.ACESFilmicToneMapping;
-  }
+  // The tone map is applied per frame by updateRadioPasses, which also has to
+  // override it for the false-colour view; nothing to do here.
   if (what === 'view') setView(state.view);
   hud.refresh();
 }
@@ -203,6 +218,40 @@ function doCapture() {
  *  Frame loop
  * ------------------------------------------------------------------ */
 
+/**
+ * Size the interferometer beam in screen pixels and switch the radio chain on.
+ *
+ * The beam is quoted in microarcseconds, so it has to travel through the real
+ * angular scale of the hole - mass and distance give microarcseconds per
+ * gravitational radius, and the camera's distance and field of view turn that
+ * into pixels.
+ */
+function updateRadioPasses() {
+  const radio = state.disc.emission === 'synchrotron';
+  beamH.enabled = beamV.enabled = radio;
+  radioColour.enabled = radio;
+  // A false-colour map is a display transform, so it must not be tone mapped.
+  const want = radio
+    ? THREE.NoToneMapping
+    : (TONE_MAPS[state.toneMapping] ?? THREE.ACESFilmicToneMapping);
+  if (renderer.toneMapping !== want) renderer.toneMapping = want;
+  if (!radio) return;
+
+  const uasPerRg = microarcsecPerRg(state.massSolar * M_SUN, state.distanceMpc);
+  let sigma = 0;
+  if (uasPerRg > 0 && state.beamUas > 0) {
+    const pxPerRad = drawingSize.y / (2 * Math.tan((lensedCamera.fov * Math.PI) / 360));
+    const pxPerRg = pxPerRad / Math.max(lensedCamera.position.length(), 1);
+    const fwhmPx = (state.beamUas / uasPerRg) * pxPerRg;
+    sigma = fwhmPx / 2.3548;   // FWHM -> standard deviation
+  }
+  beamH.material.uniforms.uSigma.value = sigma;
+  beamV.material.uniforms.uSigma.value = sigma;
+  beamH.material.uniforms.uTexel.value.set(1 / Math.max(drawingSize.x, 1), 0);
+  beamV.material.uniforms.uTexel.value.set(0, 1 / Math.max(drawingSize.y, 1));
+  radioColour.material.uniforms.uGamma.value = state.radioGamma ?? 1;
+}
+
 let last = performance.now();
 let ready = false;
 let smoothedFrame = 16;
@@ -224,7 +273,9 @@ function frame(now) {
     bloomPass.strength = state.optics.bloom;
     bloomPass.radius = 0.28;
     bloomPass.threshold = 1.15;
+    updateRadioPasses();
   } else {
+    beamH.enabled = beamV.enabled = radioColour.enabled = false;
     spacetimeControls.update();
     spacetime.sync(state);
     bloomPass.strength = state.optics.bloom * 0.9;
@@ -262,4 +313,7 @@ hud.refresh();
 requestAnimationFrame(frame);
 
 // Handy for poking at the simulation from the console.
-window.sim = { state, lensed, spacetime, renderer, lensedCamera, spacetimeCamera, setView };
+window.sim = {
+  state, lensed, spacetime, renderer, lensedCamera, spacetimeCamera, setView,
+  passes: { bloomPass, beamH, beamV, radioColour },
+};

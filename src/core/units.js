@@ -113,6 +113,26 @@ export const orbitingTimeDilation = (rInRg) => Math.sqrt(Math.max(0, 1 - 3 / rIn
 /** Escape velocity as a fraction of c for a static observer at r (in r_g). */
 export const escapeVelocity = (rInRg) => Math.sqrt(2 / rInRg);
 
+/**
+ * Angular size of one gravitational radius, in microarcseconds, for a hole of
+ * mass `massKg` at `distanceMpc`. This is the number that turns a render into
+ * a comparison with a real observation: for M87* it is 3.8 µas, which puts
+ * the 10.4 r_g shadow at the ~40 µas the EHT measured.
+ */
+export function microarcsecPerRg(massKg, distanceMpc) {
+  if (!distanceMpc) return 0;
+  const d = distanceMpc * 1e6 * PARSEC;
+  return (gravitationalRadius(massKg) / d) * (180 / Math.PI) * 3600 * 1e6;
+}
+
+/** Format an angle given in microarcseconds. */
+export function formatAngle(uas) {
+  if (!Number.isFinite(uas) || uas <= 0) return '—';
+  if (uas < 1e3) return `${uas.toPrecision(3)} µas`;
+  if (uas < 1e6) return `${(uas / 1e3).toPrecision(3)} mas`;
+  return `${(uas / 1e6).toPrecision(3)} arcsec`;
+}
+
 /** Format a length in metres using a sensible astronomical unit. */
 export function formatLength(metres) {
   const a = Math.abs(metres);

@@ -39,6 +39,9 @@ export function createBlackHoleView() {
     uDiscHeight: { value: 0.055 },
     uDiscFilament: { value: 0.85 },
     uDiscDust: { value: 0.45 },
+    uEmission: { value: 0 },
+    uEmisIndex: { value: 2.0 },
+    uBeamExp: { value: 3.0 },
     uDiscTemp: { value: 5000 },
     uDiscProfile: { value: 0.35 },
     uDiscSpin: { value: 1 },
@@ -83,6 +86,15 @@ export function createBlackHoleView() {
     uniforms.uRight.value.set(e[0], e[1], e[2]);
     uniforms.uUp.value.set(e[4], e[5], e[6]);
     uniforms.uForward.value.set(-e[8], -e[9], -e[10]);
+    // Roll about the view axis. Orbit controls own the camera's orientation,
+    // so the roll is applied to the basis here instead of to the object -
+    // it is what lets a render be turned to a published image's position
+    // angle without disturbing the controls.
+    const roll = (state.camera.rollDeg || 0) * (Math.PI / 180);
+    if (roll !== 0) {
+      uniforms.uRight.value.applyAxisAngle(uniforms.uForward.value, roll);
+      uniforms.uUp.value.applyAxisAngle(uniforms.uForward.value, roll);
+    }
     uniforms.uTanHalfFov.value = Math.tan((viewCamera.fov * Math.PI) / 360);
 
     uniforms.uSimTime.value = state.simTime;
@@ -102,6 +114,9 @@ export function createBlackHoleView() {
     uniforms.uDiscHeight.value = d.height;
     uniforms.uDiscFilament.value = d.filament;
     uniforms.uDiscDust.value = d.dust;
+    uniforms.uEmission.value = d.emission === 'synchrotron' ? 1 : 0;
+    uniforms.uEmisIndex.value = d.emisIndex;
+    uniforms.uBeamExp.value = d.beamExp;
     uniforms.uDiscTemp.value = renderDiscTemperature(state);
     uniforms.uDiscProfile.value = d.profile;
     uniforms.uDiscSpin.value = d.spin;

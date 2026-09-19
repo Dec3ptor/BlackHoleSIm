@@ -46,6 +46,9 @@ uniform float uDiscOpacity;
 uniform float uDiscHeight;     // scale height as a fraction of r (flared disc)
 uniform float uDiscFilament;   // how sharply the noise breaks into filaments
 uniform float uDiscDust;       // cool dust: absorbs without emitting
+uniform float uEmission;       // 0 = thermal black body, 1 = optically thin synchrotron
+uniform float uEmisIndex;      // radial emissivity power law, j ~ (r_in/r)^index
+uniform float uBeamExp;        // Doppler boost exponent; 3 for specific intensity
 uniform float uDiscTemp;      // peak effective temperature, kelvin
 uniform float uDiscProfile;   // 1 = physical r^-3/4 law, 0 = isothermal
 uniform float uDiscSpin;      // +1 prograde, -1 retrograde
@@ -243,7 +246,11 @@ vec2 discMedium(vec3 p, float r) {
 }
 
 /** Observed/emitted frequency ratio for gas on a circular geodesic at r. */
-float shiftFactor(float r, float b, float ny) {
+float shiftFactor(float rIn, float b, float ny) {
+  // No circular geodesic exists inside the ISCO; real flows plunge from there
+  // carrying roughly the ISCO's energy and angular momentum, so freezing the
+  // orbit at r = 6 is the standard stand-in rather than letting g go complex.
+  float r = max(rIn, 6.0);
   float gGrav = sqrt(max(0.0, 1.0 - 3.0 / r)) / sqrt(max(1e-4, 1.0 - 2.0 / uCamDist));
   float omega = uDiscSpin * pow(r, -1.5);
   float gDopp = 1.0 / max(1e-3, 1.0 + omega * b * ny);
@@ -334,6 +341,7 @@ bool hitBodies(vec3 a, vec3 bq, inout vec3 accum, inout float trans) {
 vec3 trace(vec3 ro, vec3 rd, float jitter) {
   vec3 accum = vec3(0.0);
   float trans = 1.0;
+  float radio = 0.0;   // optically thin intensity, for the synchrotron mode
 
   float r0 = length(ro);
   vec3 e1 = ro / r0;
@@ -343,6 +351,7 @@ vec3 trace(vec3 ro, vec3 rd, float jitter) {
 
   if (sinPsi < 1e-6) {
     // Exactly radial: no bending and no plane to cross.
+    if (uEmission > 0.5) return vec3(0.0);
     return cosPsi < 0.0 ? vec3(0.0) : skyColour(rd);
   }
 
@@ -386,6 +395,12 @@ vec3 trace(vec3 ro, vec3 rd, float jitter) {
 
     bool inReach = uDiscEnabled > 0.5 && r > rLo && r < rHi;
     float H = max(uDiscHeight, 0.015) * r;
+    if (uDiscEnabled > 0.5 && !inReach) {
+      // Approaching the disc from outside its radial range: do not step past
+      // the edge, or a distant camera jumps straight into the middle of it.
+      if (r > rHi && drdphi < 0.0) h = min(h, (r - rHi) / -drdphi);
+      else if (r < rLo && drdphi > 0.0) h = min(h, (rLo - r) / drdphi);
+    }
     if (inReach) {
       // Outside the slab, step no further than the distance to it; inside,
       // crawl, so the vertical profile is sampled rather than jumped over.
@@ -416,29 +431,41 @@ vec3 trace(vec3 ro, vec3 rd, float jitter) {
         vec2 med = discMedium(pm, rm);
         float ext = med.x + med.y;
         if (ext > 1e-4) {
-          float alpha = 1.0 - exp(-(uDiscOpacity / max(2.0 * H, 1e-3)) * ext * dsdphi * h);
-          float Tobs = discTemperature(rm) * shiftFactor(rm, b, ny);
-          float rel = Tobs / max(uDiscTemp, 1.0);
-          // Thermal source function: I ~ T^4, with the g^4 beaming riding
-          // along for free because the shift was folded into T_obs. Only the
-          // gas fraction of the opacity emits; the dust just blocks.
-          vec3 src = blackbody(Tobs) * (rel * rel * rel * rel)
-                   * uDiscBrightness * (med.x / ext);
-          accum += trans * src * alpha;
-          trans *= 1.0 - alpha;
+          float g = shiftFactor(rm, b, ny);
+          if (uEmission > 0.5) {
+            // Optically thin synchrotron, as at 230 GHz around M87*: nothing
+            // absorbs, emission just piles up along the ray. The whole ring
+            // asymmetry is the g^3 Doppler boost of plasma orbiting at a
+            // large fraction of c.
+            float j = med.x * pow(uDiscInner / max(rm, 1e-3), uEmisIndex);
+            radio += j * pow(g, uBeamExp) * dsdphi * h * uDiscBrightness;
+          } else {
+            float alpha = 1.0 - exp(-(uDiscOpacity / max(2.0 * H, 1e-3)) * ext * dsdphi * h);
+            float Tobs = discTemperature(rm) * g;
+            float rel = Tobs / max(uDiscTemp, 1.0);
+            // Thermal source function: I ~ T^4, with the g^4 beaming riding
+            // along for free because the shift was folded into T_obs. Only the
+            // gas fraction of the opacity emits; the dust just blocks.
+            vec3 src = blackbody(Tobs) * (rel * rel * rel * rel)
+                     * uDiscBrightness * (med.x / ext);
+            accum += trans * src * alpha;
+            trans *= 1.0 - alpha;
+          }
         }
       }
     }
 
-    if (uBodyCount > 0 && hitBodies(pos, pos1, accum, trans)) return accum;
+    if (uEmission < 0.5 && uBodyCount > 0 && hitBodies(pos, pos1, accum, trans)) return accum;
 
     u = u1;
     du = du1;
     phi = phi1;
 
     if (u >= 0.5) {
-      // Through the horizon. Nothing behind it, by construction.
-      return accum;
+      // Through the horizon. Nothing behind it, by construction - but light
+      // emitted in front of it still counts, which is why the observed
+      // "shadow" is only about ten times fainter than the ring, not black.
+      return uEmission > 0.5 ? vec3(radio * uGain) : accum;
     }
     if (u <= uEsc && du < 0.0) {
       // u = A sin(phiInf - phi) far out, so the asymptote is exact:
@@ -446,13 +473,14 @@ vec3 trace(vec3 ro, vec3 rd, float jitter) {
       vec3 out3 = cos(phiInf) * e1 + sin(phiInf) * e2;
       // Starlight is blueshifted on the way down to the observer.
       float blue = 1.0 / sqrt(max(1e-4, 1.0 - 2.0 / r0));
+      if (uEmission > 0.5) return vec3(radio * uGain);
       return accum + trans * skyColour(normalize(out3)) * mix(1.0, blue * blue, uRedshift);
     }
-    if (trans < 0.003) return accum;
+    if (uEmission < 0.5 && trans < 0.003) return accum;
   }
   // Ran out of steps: these are rays spiralling at the photon sphere, which
   // overwhelmingly end up inside the horizon.
-  return accum;
+  return uEmission > 0.5 ? vec3(radio * uGain) : accum;
 }
 
 void main() {
@@ -467,6 +495,13 @@ void main() {
   // Dither where inside each step the medium is sampled, so the march reads
   // as grain rather than as concentric bands.
   float jitter = 0.18 + 0.64 * hash13(vec3(gl_FragCoord.xy, 1.0));
+
+  if (uEmission > 0.5) {
+    // Raw scalar intensity. The beam convolution and the false-colour map are
+    // separate passes, so that the blur happens before the colouring.
+    outColor = vec4(trace(uCamPos, rd, jitter), 1.0);
+    return;
+  }
   outColor = vec4(trace(uCamPos, rd, jitter) * uGain, 1.0);
 }
 `;

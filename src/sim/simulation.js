@@ -16,9 +16,33 @@ import {
 } from '../core/geodesics.js';
 
 export const PRESETS = {
+  'm87-eht': {
+    label: 'M87* — the EHT image',
+    massSolar: 6.5e9,
+    distanceMpc: 16.8,
+    mdotEdd: 1e-5,
+    blurb: 'The first black hole ever photographed, reconstructed the way the Event '
+      + 'Horizon Telescope saw it in 2019: a 42 µas ring, ten times brighter than the '
+      + 'depression inside it, and markedly brighter along the south. That asymmetry is '
+      + 'real Doppler beaming of plasma orbiting at a large fraction of c, seen almost '
+      + 'down the jet axis at 17°. Optically thin synchrotron at 230 GHz, false-coloured '
+      + 'and blurred to the array\u2019s 20 µas beam.',
+    disc: {
+      inner: 3.6, outer: 12, height: 0.20, filament: 0.35, dust: 0,
+      opacity: 1, brightness: 3.0, profile: 1, peakTempVisual: 5000,
+      emission: 'synchrotron', emisIndex: 3.2, beamExp: 3.0, spin: -1,
+    },
+    optics: { doppler: 1, redshift: 1, stars: 0, nebula: 0, bloom: 0, exposure: 1.0 },
+    // Rolled so the beamed side sits due south, matching the published
+    // orientation: north up, east left, bright side at PA ~180 degrees.
+    camera: { distance: 220, inclinationDeg: 17, azimuthDeg: 0, fovDeg: 11, rollDeg: -83 },
+    toneMapping: 'none',
+    beamUas: 20,
+  },
   'sgr-a': {
     label: 'Sagittarius A*',
     massSolar: 4.297e6,
+    distanceMpc: 0.008277,
     mdotEdd: 1e-7,
     blurb: 'The 4.3-million-solar-mass hole at the centre of the Milky Way. Its '
       + 'accretion flow is extraordinarily faint, so the disc here is scaled up to be visible.',
@@ -26,8 +50,9 @@ export const PRESETS = {
     camera: { distance: 46, inclinationDeg: 72, fovDeg: 55 },
   },
   'm87': {
-    label: 'M87*',
+    label: 'M87* — optical impression',
     massSolar: 6.5e9,
+    distanceMpc: 16.8,
     mdotEdd: 1e-5,
     blurb: 'The first black hole ever imaged, in 2019. The Event Horizon Telescope '
       + 'resolved exactly the bright asymmetric ring this renderer produces.',
@@ -37,11 +62,30 @@ export const PRESETS = {
   'cygnus-x1': {
     label: 'Cygnus X-1',
     massSolar: 21.2,
+    distanceMpc: 0.00222,
     mdotEdd: 0.02,
     blurb: 'A stellar-mass hole pulling gas from a blue supergiant companion. Its '
       + 'disc really does peak in soft X-rays at a few million kelvin.',
     disc: { inner: 6, outer: 26, opacity: 3.0, height: 0.04, filament: 0.9, dust: 0.5, brightness: 2.4, profile: 1.0, peakTempVisual: 7400 },
     camera: { distance: 52, inclinationDeg: 62, fovDeg: 50 },
+  },
+  'gargantua-real': {
+    label: 'Gargantua + Doppler beaming',
+    massSolar: 1e8,
+    distanceMpc: 0,
+    mdotEdd: 1e-4,
+    blurb: 'The same disc as the film preset, but with the beaming and frequency shift '
+      + 'the film left out. One limb is now several times brighter and bluer than the '
+      + 'other, which is what a camera would really record - and exactly why Nolan had '
+      + 'it removed.',
+    disc: {
+      inner: 6, outer: 34, opacity: 3.2, height: 0.028, filament: 0.90,
+      dust: 0.70, brightness: 2.6, profile: 0.35, peakTempVisual: 3400,
+      emission: 'thermal', emisIndex: 2.0, beamExp: 3.0, spin: 1,
+    },
+    optics: { doppler: 1, redshift: 1, stars: 0.5, nebula: 0.22, bloom: 0.55, exposure: 1 },
+    camera: { distance: 62, inclinationDeg: 87, fovDeg: 46 },
+    toneMapping: 'aces',
   },
   gargantua: {
     label: 'Gargantua (film)',
@@ -54,7 +98,9 @@ export const PRESETS = {
     disc: {
       inner: 6, outer: 34, opacity: 3.2, height: 0.028, filament: 0.90,
       dust: 0.70, brightness: 2.6, profile: 0.35, peakTempVisual: 3400,
+      emission: 'thermal', emisIndex: 2.0, beamExp: 3.0, spin: 1,
     },
+    toneMapping: 'aces',
     optics: { doppler: 0, redshift: 1, stars: 0.5, nebula: 0.22, bloom: 0.55, exposure: 1 },
     camera: { distance: 62, inclinationDeg: 87, fovDeg: 46 },
   },
@@ -63,6 +109,8 @@ export const PRESETS = {
 export const DEFAULTS = {
   preset: 'gargantua',
   massSolar: 1e8,
+  distanceMpc: 0,
+  beamUas: 0,
   mdotEdd: 1e-4,
 
   gr: true,
@@ -79,6 +127,9 @@ export const DEFAULTS = {
     height: 0.028,
     filament: 0.90,
     dust: 0.70,
+    emission: 'thermal',
+    emisIndex: 2.0,
+    beamExp: 3.0,
     brightness: 2.6,
     profile: 0.35,
     spin: 1,
@@ -107,9 +158,11 @@ export const DEFAULTS = {
     inclinationDeg: 87,
     azimuthDeg: 0,
     fovDeg: 46,
+    rollDeg: 0,
   },
 
   toneMapping: 'aces',
+  radioGamma: 1.0,
   view: 'lensed',
   embedScale: 1.6,
   showMarkers: true,
@@ -332,6 +385,9 @@ export function applyPreset(state, key) {
   state.preset = key;
   state.massSolar = p.massSolar;
   state.mdotEdd = p.mdotEdd;
+  state.distanceMpc = p.distanceMpc ?? 0;
+  state.beamUas = p.beamUas ?? 0;
+  state.toneMapping = p.toneMapping ?? 'aces';
   Object.assign(state.disc, p.disc);
   Object.assign(state.camera, p.camera);
   if (p.optics) Object.assign(state.optics, p.optics);

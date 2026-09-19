@@ -17,6 +17,8 @@ faked bending.
 
 ![Planets on geodesic orbits, lit only by the disc](assets/screenshot-planets.png)
 
+![The same disc with Doppler beaming restored](assets/screenshot-beaming.png)
+
 ---
 
 ## What it actually computes
@@ -104,6 +106,28 @@ off as `√r`. A fan of null geodesics can be overlaid, straddling the critical 
 parameter so you can watch capture begin. The surface really is that shallow; the depth
 slider exaggerates it for legibility and 1.00× is the truth.
 
+## M87*, the real photograph
+
+The **M87* — the EHT image** preset reconstructs the first photograph of a black hole
+rather than imitating it. The emission is optically thin synchrotron from a hot,
+geometrically thick flow, integrated along each ray with no absorption — the physics that
+applies at 230 GHz. It lands on the measured numbers:
+
+| Quantity | This simulation | Event Horizon Telescope, 2019 |
+| --- | --- | --- |
+| Angular scale | 3.82 µas per r_g | 6.5×10⁹ M☉ at 16.8 Mpc |
+| Shadow / ring diameter | 39.7 µas | 42 ± 3 µas ring |
+| Ring : depression flux | 10.5 : 1 | ~10 : 1 |
+| Bright side position angle | 178° east of north | 150°–200° |
+| Beam | 20 µas FWHM | ~20 µas |
+
+The asymmetry is not painted on. Set the **beaming exponent** to zero and the ring becomes
+perfectly symmetric — it is the `g³` Doppler boost of plasma orbiting at a large fraction
+of c, seen 17° off the jet axis, which is exactly the EHT's own explanation. Turn the beam
+down to zero to see the razor-thin photon ring underneath the array's resolution.
+
+![M87*, convolved to the EHT beam](assets/screenshot-m87.png)
+
 ## Matching the film
 
 The **Gargantua (film)** preset targets the look of *Interstellar*, and it gets there
@@ -112,12 +136,24 @@ on, one limb runs several times brighter and bluer and the famous symmetry disap
 turn the slider up to see what a camera would actually record. The preset also flattens
 the temperature law towards isothermal, which is how the film kept the disc glowing evenly
 out to the rim rather than collapsing into a bright inner ring. Both are exposed as
-controls rather than baked in, so you can slide between the film and the physics.
+controls rather than baked in, so you can slide between the film and the physics — and the
+**Gargantua + Doppler beaming** preset is the same disc with the omission put back, which
+is what a camera would really record.
+
+Sources: [CERN Courier on building Gargantua](https://cerncourier.com/a/building-gargantua/),
+[James, von Tunzelmann, Franklin & Thorne, *Class. Quantum Grav.* **32** 065001](https://iopscience.iop.org/article/10.1088/0264-9381/32/6/065001),
+[EHT Collaboration, *First M87 EHT Results I*](https://arxiv.org/abs/1906.11238),
+[EHT Results V: physical origin of the asymmetric ring](https://ui.adsabs.harvard.edu/abs/2019ApJ...875L...5E/abstract),
+[orientation of the crescent image of M87*](https://www.aanda.org/articles/aa/full_html/2020/02/aa36586-19/aa36586-19.html).
 
 ## What is deliberately not simulated
 
 - **The hole does not rotate.** This is Schwarzschild, not Kerr: no frame dragging, no
-  ergosphere, no spin parameter.
+  ergosphere, no spin parameter. M87*'s ring is thought to be spin-influenced, so the
+  reconstruction here matches its size, contrast and asymmetry but not the detailed
+  shape a spinning model would give.
+- **No plunging-region dynamics.** Inside the ISCO there is no circular geodesic, so the
+  frequency shift is frozen at its r = 6 value rather than following the real infall.
 - **The camera is a static observer**, so there is no aberration from its own motion.
 - The disc is geometrically thin and optically parameterised; there is no radiative
   transfer, no self-heating and no magnetohydrodynamics.

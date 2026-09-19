@@ -209,6 +209,34 @@ export function buildPanel(root, state, onChange) {
     format: (v) => `${(v / 1000).toFixed(1)} kK`,
   });
 
+  const radio = section('Radio view', false);
+  choice(radio, {
+    label: 'Emission', path: 'disc.emission',
+    options: [['thermal', 'Thermal'], ['synchrotron', 'Synchrotron']],
+    hint: 'Thermal is an optically thick black-body disc. Synchrotron is the '
+      + 'optically thin hot flow the Event Horizon Telescope sees at 230 GHz, '
+      + 'shown in false colour and blurred to the array beam.',
+  });
+  slider(radio, {
+    label: 'Beam (FWHM)', path: 'beamUas', min: 0, max: 60, step: 0.5,
+    format: (v) => (v > 0 ? `${v.toFixed(0)} µas` : 'off'),
+    hint: 'The EHT resolved M87* with a ~20 µas beam, about half the ring diameter.',
+  });
+  slider(radio, {
+    label: 'Emissivity law', path: 'disc.emisIndex', min: 0, max: 5, step: 0.1,
+    format: (v) => `j ∝ r^-${v.toFixed(1)}`,
+  });
+  slider(radio, {
+    label: 'Beaming exponent', path: 'disc.beamExp', min: 0, max: 5, step: 0.1,
+    format: (v) => `g^${v.toFixed(1)}`,
+    hint: '3 is specific intensity at a fixed observed frequency; it is the '
+      + 'whole reason one side of the ring is brighter.',
+  });
+  slider(radio, {
+    label: 'Display gamma', path: 'radioGamma', min: 0.3, max: 2.5, step: 0.05,
+    format: (v) => v.toFixed(2),
+  });
+
   const rel = section('Relativity');
   toggle(rel, {
     label: 'Curved spacetime', path: 'gr',
@@ -233,6 +261,12 @@ export function buildPanel(root, state, onChange) {
     label: 'Inclination', path: 'camera.inclinationDeg', min: 0, max: 90, step: 0.5, change: 'camera',
     format: (v) => `${v.toFixed(0)}°`,
     hint: '0° looks down on the disc, 90° is edge-on.',
+  });
+  slider(cam, {
+    label: 'Roll', path: 'camera.rollDeg', min: -180, max: 180, step: 1,
+    format: (v) => `${v.toFixed(0)}°`,
+    hint: 'Turns the image about the line of sight, for matching a published '
+      + 'orientation such as the EHT\u2019s north-up, east-left convention.',
   });
   slider(cam, {
     label: 'Field of view', path: 'camera.fovDeg', min: 12, max: 100, step: 0.5, change: 'camera',
