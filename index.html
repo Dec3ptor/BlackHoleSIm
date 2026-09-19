@@ -87,20 +87,42 @@
       <li><b>Shadow and photon ring.</b> Photons with impact parameter below
         <i>b</i>&nbsp;=&nbsp;3√3&nbsp;<i>M</i> can never escape, so the shadow has an angular
         radius set by that number and nothing else.</li>
-      <li><b>Accretion disc.</b> A Shakura–Sunyaev thin disc, temperature
+      <li><b>Accretion disc.</b> Not a painted surface but a volume: the ray marches
+        through a flared slab of gas, solving emission and absorption as it goes. The gas
+        emits as a black body at the Shakura–Sunyaev temperature
         <i>T</i>&nbsp;∝&nbsp;[(1−√(<i>r</i><sub>in</sub>/<i>r</i>))/<i>r</i>³]<sup>1/4</sup>,
-        coloured by integrating Planck's law against the CIE colour-matching functions.</li>
+        coloured by integrating Planck's law against the CIE colour-matching functions.
+        A second, cooler dust component absorbs without emitting, which is what draws the
+        dark lanes across the bright gas behind it.</li>
+      <li><b>Structure that winds itself up.</b> The gas is fractal noise sampled in the
+        co-rotating frame, azimuth minus Ω(<i>r</i>)<i>t</i>. Nothing scrolls it: Keplerian
+        shear pulls it into trailing spirals on its own, with the inner disc lapping the
+        outer disc exactly as fast as Ω&nbsp;∝&nbsp;<i>r</i><sup>−3/2</sup> says it should.</li>
       <li><b>Doppler beaming and gravitational redshift.</b> The observed frequency ratio
         <i>g</i> is computed from the emitter's four-velocity on its circular geodesic; the
         brightness follows as <i>g</i>⁴. That is why one side of the disc is fiercely bright
         and blue while the other is dim and red.</li>
-      <li><b>Orbits.</b> Test particles follow timelike geodesics, so they precess, they have
-        an innermost stable circular orbit at 6&nbsp;<i>r</i><sub>g</sub>, and inside it they
-        spiral in and are lost.</li>
+      <li><b>Orbits and worlds.</b> Test particles follow timelike geodesics, so they precess,
+        they have an innermost stable circular orbit at 6&nbsp;<i>r</i><sub>g</sub>, and inside
+        it they spiral in and are lost. Planets are lit only by the disc, so the terminator
+        always faces the hole, and they are tidally locked — which anything orbiting this
+        close would be. They are lensed with everything else, so a planet passing behind the
+        hole can appear twice.</li>
       <li><b>The spacetime view</b> draws Flamm's paraboloid, <i>z</i> = 2√(<i>r</i><sub>s</sub>(<i>r</i>−<i>r</i><sub>s</sub>)),
         which is the genuine isometric embedding of the equatorial slice rather than a
         rubber-sheet cartoon.</li>
     </ul>
+
+    <h3>About the film</h3>
+    <p>
+      The <b>Gargantua (film)</b> preset aims at the look of <i>Interstellar</i>, and one of
+      the ways it gets there is by switching <b>Doppler beaming off</b>. That is not a
+      shortcut — the film did the same thing. With beaming on, one limb of the disc is
+      several times brighter and bluer than the other and the famous symmetry disappears.
+      Turn the Doppler slider up to see what a camera would really record. The same preset
+      also flattens the temperature law towards isothermal, which is how the film kept the
+      disc glowing evenly out to the rim instead of collapsing into a bright inner ring.
+    </p>
 
     <h3>What is not simulated</h3>
     <p>

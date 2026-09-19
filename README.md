@@ -15,6 +15,8 @@ faked bending.
 
 ![The lensed view](assets/screenshot-lensed.png)
 
+![Planets on geodesic orbits, lit only by the disc](assets/screenshot-planets.png)
+
 ---
 
 ## What it actually computes
@@ -43,8 +45,18 @@ That single equation, integrated honestly, produces:
 
 ### The accretion disc
 
-A Shakura–Sunyaev / Novikov–Thorne thin disc with the standard effective temperature
-profile
+The disc is a **volume, not a surface**. Each ray marches through a flared slab of gas
+with a Gaussian vertical profile, solving emission and absorption step by step. Two
+components share the slab: hot gas that emits and absorbs, and cooler dust that only
+absorbs — which is what draws the dark lanes across the bright gas behind them. Because
+opacity is density-dependent, thin wisps glow and let the far side of the disc show
+through while dense strands block it, so both lensed arcs stay visible at once.
+
+Its structure is fractal noise sampled in the **co-rotating frame**, azimuth minus
+Ω(r)·t. Nothing scrolls it: Keplerian shear winds it into trailing spirals by itself,
+the inner disc lapping the outer one exactly as fast as Ω ∝ r^(-3/2) requires.
+
+The gas emits as a black body at the standard effective temperature profile
 
 ```
 T(r) ∝ [ (1 − √(r_in/r)) / r³ ]^(1/4)
@@ -66,7 +78,11 @@ intensity following as `g⁴`. That is why one limb of the disc is fiercely brig
 while the other is dim and red — and why flipping the disc's rotation mirrors the image
 exactly.
 
-### Orbits
+### Orbits and worlds
+
+Planets are lit only by the accretion disc, so the terminator always faces the hole, and
+they are tidally locked — which anything orbiting this close would be. They are lensed
+with everything else, so a planet passing behind the hole can appear twice.
 
 Test particles move on real timelike geodesics,
 
@@ -87,6 +103,16 @@ equatorial slice, not a rubber-sheet cartoon. It meets the horizon vertically an
 off as `√r`. A fan of null geodesics can be overlaid, straddling the critical impact
 parameter so you can watch capture begin. The surface really is that shallow; the depth
 slider exaggerates it for legibility and 1.00× is the truth.
+
+## Matching the film
+
+The **Gargantua (film)** preset targets the look of *Interstellar*, and it gets there
+partly by switching **Doppler beaming off** — which is what the film did too. With beaming
+on, one limb runs several times brighter and bluer and the famous symmetry disappears;
+turn the slider up to see what a camera would actually record. The preset also flattens
+the temperature law towards isothermal, which is how the film kept the disc glowing evenly
+out to the rim rather than collapsing into a bright inner ring. Both are exposed as
+controls rather than baked in, so you can slide between the film and the physics.
 
 ## What is deliberately not simulated
 

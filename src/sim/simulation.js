@@ -22,7 +22,7 @@ export const PRESETS = {
     mdotEdd: 1e-7,
     blurb: 'The 4.3-million-solar-mass hole at the centre of the Milky Way. Its '
       + 'accretion flow is extraordinarily faint, so the disc here is scaled up to be visible.',
-    disc: { inner: 6, outer: 20, opacity: 0.9, turbulence: 0.75 },
+    disc: { inner: 6, outer: 22, opacity: 2.4, height: 0.055, filament: 0.85, dust: 0.4, brightness: 2.0, profile: 0.8, peakTempVisual: 5600 },
     camera: { distance: 46, inclinationDeg: 72, fovDeg: 55 },
   },
   'm87': {
@@ -31,7 +31,7 @@ export const PRESETS = {
     mdotEdd: 1e-5,
     blurb: 'The first black hole ever imaged, in 2019. The Event Horizon Telescope '
       + 'resolved exactly the bright asymmetric ring this renderer produces.',
-    disc: { inner: 6, outer: 16, opacity: 1.1, turbulence: 0.6 },
+    disc: { inner: 6, outer: 18, opacity: 2.8, height: 0.07, filament: 0.8, dust: 0.35, brightness: 2.2, profile: 1.0, peakTempVisual: 6200 },
     camera: { distance: 48, inclinationDeg: 17, fovDeg: 42 },
   },
   'cygnus-x1': {
@@ -40,17 +40,23 @@ export const PRESETS = {
     mdotEdd: 0.02,
     blurb: 'A stellar-mass hole pulling gas from a blue supergiant companion. Its '
       + 'disc really does peak in soft X-rays at a few million kelvin.',
-    disc: { inner: 6, outer: 24, opacity: 1.3, turbulence: 0.85 },
+    disc: { inner: 6, outer: 26, opacity: 3.0, height: 0.04, filament: 0.9, dust: 0.5, brightness: 2.4, profile: 1.0, peakTempVisual: 7400 },
     camera: { distance: 52, inclinationDeg: 62, fovDeg: 50 },
   },
   gargantua: {
-    label: 'Gargantua (film-style)',
+    label: 'Gargantua (film)',
     massSolar: 1e8,
     mdotEdd: 1e-4,
-    blurb: 'A wide, cool, nearly edge-on disc in the style of Interstellar, where '
-      + 'the lensed far side arches over and under the shadow.',
-    disc: { inner: 6, outer: 30, opacity: 1.6, turbulence: 0.45 },
-    camera: { distance: 62, inclinationDeg: 84, fovDeg: 46 },
+    blurb: 'The Interstellar look: a wide, cool, nearly edge-on disc whose far side '
+      + 'arches over the top and folds under the bottom. Doppler beaming is turned '
+      + 'off here because the film deliberately left it out - with it on, one limb '
+      + 'goes blindingly bright and the famous symmetry disappears.',
+    disc: {
+      inner: 6, outer: 34, opacity: 3.2, height: 0.028, filament: 0.90,
+      dust: 0.70, brightness: 2.6, profile: 0.35, peakTempVisual: 3400,
+    },
+    optics: { doppler: 0, redshift: 1, stars: 0.5, nebula: 0.22, bloom: 0.55, exposure: 1 },
+    camera: { distance: 62, inclinationDeg: 87, fovDeg: 46 },
   },
 };
 
@@ -61,32 +67,36 @@ export const DEFAULTS = {
 
   gr: true,
   paused: false,
-  simTime: 0,
+  // The disc starts already wound up; it has been orbiting a long time.
+  simTime: 300,
   timeScale: 12,          // r_g/c per wall-clock second
 
   disc: {
     enabled: true,
     inner: R_ISCO,
     outer: 30,
-    opacity: 1.6,
-    turbulence: 0.45,
-    brightness: 0.35,
+    opacity: 3.2,
+    height: 0.028,
+    filament: 0.90,
+    dust: 0.70,
+    brightness: 2.6,
+    profile: 0.35,
     spin: 1,
-    peakTempVisual: 5200, // kelvin used for rendering in "normalised" mode
+    peakTempVisual: 3400, // kelvin used for rendering in "normalised" mode
     trueTemperature: false,
   },
 
   optics: {
-    doppler: 1,
+    doppler: 0,
     redshift: 1,
-    stars: 1,
-    nebula: 1,
-    bloom: 0.42,
+    stars: 0.5,
+    nebula: 0.22,
+    bloom: 0.55,
     exposure: 1.0,
   },
 
   quality: {
-    steps: 320,
+    steps: 300,
     stepScale: 1,
     renderScale: 0.85,
     adaptive: true,
@@ -94,11 +104,12 @@ export const DEFAULTS = {
 
   camera: {
     distance: 62,
-    inclinationDeg: 84,
+    inclinationDeg: 87,
     azimuthDeg: 0,
     fovDeg: 46,
   },
 
+  toneMapping: 'aces',
   view: 'lensed',
   embedScale: 1.6,
   showMarkers: true,
@@ -129,7 +140,7 @@ let nextId = 1;
 export function makeParticle(opt) {
   const {
     rp, ra = rp, inclinationDeg = 0, nodeDeg = 0, phase = 0, rdot = 0,
-    colour = '#9fd0ff', temperature = 9000, radius = 0.28, label = '',
+    kind = 'marker', colour = '#9fd0ff', temperature = 9000, radius = 0.28, label = '',
   } = opt;
 
   const { L } = ra > rp ? orbitFromApsides(rp, ra) : { L: circularL(rp) };
@@ -156,8 +167,11 @@ export function makeParticle(opt) {
     e2: rot([0, 0, -1]),
     // [r, dr/dtau, phi, t]
     state: [rp, rdot, phase, 0],
+    kind,
     colour,
-    temperature,
+    // Planets carry no emission temperature: the renderer lights them with
+    // the disc instead, which is what puts the terminator facing the hole.
+    temperature: kind === 'planet' ? 0 : temperature,
     radius,
     label,
     alive: true,
@@ -262,6 +276,23 @@ export const SCENARIOS = {
       makeParticle({ rp: 34, inclinationDeg: 8, nodeDeg: 300, phase: 0.6, colour: '#c9fff0', temperature: 21000 }),
     ],
   },
+  planets: {
+    label: 'Planets',
+    blurb: 'Worlds on real geodesic orbits, lit only by the accretion disc and lensed '
+      + 'along with everything else - so each one can appear twice when it passes '
+      + 'behind the hole. Being this close, they are tidally locked, and the one '
+      + 'nearest the hole runs its clock far slower than the outer one.',
+    build: () => [
+      makeParticle({
+        rp: 34, kind: 'planet', radius: 0.85, colour: '#8ea4bd',
+        inclinationDeg: 34, nodeDeg: 20, phase: 1.15, label: 'inner world',
+      }),
+      makeParticle({
+        rp: 52, ra: 68, kind: 'planet', radius: 1.45, colour: '#b9a488',
+        inclinationDeg: 13, nodeDeg: 210, phase: 3.9, label: 'outer world',
+      }),
+    ],
+  },
   'none': { label: 'No test particles', blurb: '', build: () => [] },
 };
 
@@ -303,6 +334,7 @@ export function applyPreset(state, key) {
   state.mdotEdd = p.mdotEdd;
   Object.assign(state.disc, p.disc);
   Object.assign(state.camera, p.camera);
+  if (p.optics) Object.assign(state.optics, p.optics);
   return state;
 }
 

@@ -30,14 +30,18 @@ export function createBlackHoleView() {
     uStepScale: { value: 1 },
     uGR: { value: 1 },
     uEscapeRadius: { value: 150 },
+    uCamDist: { value: 60 },
 
     uDiscEnabled: { value: 1 },
     uDiscInner: { value: 6 },
     uDiscOuter: { value: 40 },
-    uDiscOpacity: { value: 1.6 },
-    uDiscTemp: { value: 7000 },
+    uDiscOpacity: { value: 2.4 },
+    uDiscHeight: { value: 0.055 },
+    uDiscFilament: { value: 0.85 },
+    uDiscDust: { value: 0.45 },
+    uDiscTemp: { value: 5000 },
+    uDiscProfile: { value: 0.35 },
     uDiscSpin: { value: 1 },
-    uDiscTurbulence: { value: 0.45 },
     uDiscBrightness: { value: 1 },
     uDoppler: { value: 1 },
     uRedshift: { value: 1 },
@@ -88,15 +92,19 @@ export function createBlackHoleView() {
 
     const r0 = viewCamera.position.length();
     uniforms.uEscapeRadius.value = Math.max(150, 3 * r0, 1.8 * state.disc.outer);
+    uniforms.uCamDist.value = r0;
 
     const d = state.disc;
     uniforms.uDiscEnabled.value = d.enabled ? 1 : 0;
     uniforms.uDiscInner.value = d.inner;
     uniforms.uDiscOuter.value = d.outer;
     uniforms.uDiscOpacity.value = d.opacity;
+    uniforms.uDiscHeight.value = d.height;
+    uniforms.uDiscFilament.value = d.filament;
+    uniforms.uDiscDust.value = d.dust;
     uniforms.uDiscTemp.value = renderDiscTemperature(state);
+    uniforms.uDiscProfile.value = d.profile;
     uniforms.uDiscSpin.value = d.spin;
-    uniforms.uDiscTurbulence.value = d.turbulence;
     uniforms.uDiscBrightness.value = d.brightness;
 
     const o = state.optics;
@@ -114,6 +122,8 @@ export function createBlackHoleView() {
         const [x, y, z] = particlePosition(p);
         uniforms.uBodyPos.value[n].set(x, y, z, p.radius);
         tmpColour.set(p.colour);
+        // The alpha channel doubles as the emission temperature; zero marks a
+        // planet, which the shader lights from the disc instead.
         uniforms.uBodyCol.value[n].set(tmpColour.r, tmpColour.g, tmpColour.b, p.temperature);
         n++;
       }

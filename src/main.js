@@ -34,6 +34,12 @@ if (!renderer || !renderer.capabilities.isWebGL2) {
   throw new Error('WebGL2 is required');
 }
 renderer.setSize(container.clientWidth, container.clientHeight, false);
+const TONE_MAPS = {
+  aces: THREE.ACESFilmicToneMapping,
+  agx: THREE.AgXToneMapping,
+  neutral: THREE.NeutralToneMapping,
+  reinhard: THREE.ReinhardToneMapping,
+};
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -134,6 +140,10 @@ function onStateChange(what) {
     placeLensedCamera();
   }
   if (what === 'quality') resize();
+  if (what === 'tone') {
+    // OutputPass notices the change and rebuilds its defines by itself.
+    renderer.toneMapping = TONE_MAPS[state.toneMapping] ?? THREE.ACESFilmicToneMapping;
+  }
   if (what === 'view') setView(state.view);
   hud.refresh();
 }

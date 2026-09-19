@@ -169,9 +169,33 @@ export function buildPanel(root, state, onChange) {
     label: 'Outer radius', path: 'disc.outer', min: 8, max: 90, step: 0.5,
     format: (v) => `${v.toFixed(0)} r_g`,
   });
-  slider(disc, { label: 'Optical depth', path: 'disc.opacity', min: 0.05, max: 4 });
-  slider(disc, { label: 'Turbulence', path: 'disc.turbulence', min: 0, max: 1 });
-  slider(disc, { label: 'Brightness', path: 'disc.brightness', min: 0, max: 3 });
+  slider(disc, {
+    label: 'Optical depth', path: 'disc.opacity', min: 0.05, max: 6,
+    hint: 'Vertical optical depth through the densest gas. Lower lets the far '
+      + 'side of the disc show through the near side.',
+  });
+  slider(disc, {
+    label: 'Scale height', path: 'disc.height', min: 0.015, max: 0.22, step: 0.005,
+    format: (v) => `H/r = ${v.toFixed(3)}`,
+  });
+  slider(disc, {
+    label: 'Filaments', path: 'disc.filament', min: 0, max: 1,
+    hint: 'How sharply the gas breaks into strands. Differential rotation '
+      + 'winds them up on its own as time runs.',
+  });
+  slider(disc, {
+    label: 'Dust lanes', path: 'disc.dust', min: 0, max: 1.5,
+    hint: 'Cool dust that absorbs without emitting, drawing dark lanes across '
+      + 'the hot gas behind it.',
+  });
+  slider(disc, { label: 'Brightness', path: 'disc.brightness', min: 0, max: 6 });
+  slider(disc, {
+    label: 'Temperature law', path: 'disc.profile', min: 0, max: 1.4,
+    format: (v) => (v > 0.95 && v < 1.05 ? 'physical' : `${v.toFixed(2)} × r^-3/4`),
+    hint: '1.00 is the real thin-disc r^-3/4 law. Lower flattens it towards '
+      + 'isothermal, which is what Interstellar used to keep the disc glowing '
+      + 'evenly all the way out.',
+  });
   choice(disc, {
     label: 'Rotation', path: 'disc.spin',
     options: [[1, 'Prograde'], [-1, 'Retrograde']],
@@ -216,6 +240,11 @@ export function buildPanel(root, state, onChange) {
   });
 
   const sky = section('Image', false);
+  dropdown(sky, {
+    label: 'Tone mapping', path: 'toneMapping', change: 'tone',
+    options: [['aces', 'ACES filmic'], ['agx', 'AgX'], ['neutral', 'Neutral'], ['reinhard', 'Reinhard']],
+    hint: 'ACES keeps a white-hot core; Neutral holds more saturation in the highlights.',
+  });
   slider(sky, { label: 'Exposure', path: 'optics.exposure', min: 0.05, max: 4 });
   slider(sky, { label: 'Bloom', path: 'optics.bloom', min: 0, max: 2.5 });
   slider(sky, { label: 'Starlight', path: 'optics.stars', min: 0, max: 3 });

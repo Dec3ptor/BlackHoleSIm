@@ -37,14 +37,18 @@ uniform int   uSteps;
 uniform float uStepScale;
 uniform float uGR;            // 1 = curved spacetime, 0 = flat (comparison)
 uniform float uEscapeRadius;
+uniform float uCamDist;       // observer radius, for the gravitational shift
 
 uniform float uDiscEnabled;
 uniform float uDiscInner;
 uniform float uDiscOuter;
 uniform float uDiscOpacity;
+uniform float uDiscHeight;     // scale height as a fraction of r (flared disc)
+uniform float uDiscFilament;   // how sharply the noise breaks into filaments
+uniform float uDiscDust;       // cool dust: absorbs without emitting
 uniform float uDiscTemp;      // peak effective temperature, kelvin
+uniform float uDiscProfile;   // 1 = physical r^-3/4 law, 0 = isothermal
 uniform float uDiscSpin;      // +1 prograde, -1 retrograde
-uniform float uDiscTurbulence;
 uniform float uDiscBrightness;
 uniform float uDoppler;       // 0..1, blends the beaming term out
 uniform float uRedshift;      // 0..1, blends the gravitational shift out
@@ -180,21 +184,70 @@ float discTemperature(float r) {
   float f = 1.0 - sqrt(uDiscInner / r);
   float rp = 1.36111111 * uDiscInner;          // peak sits at (49/36) r_in
   float fp = 1.0 - sqrt(uDiscInner / rp);
-  return uDiscTemp * pow((f * rp * rp * rp) / (fp * r * r * r), 0.25);
+  float ratio = pow((f * rp * rp * rp) / (fp * r * r * r), 0.25);
+  // uDiscProfile flattens the law towards isothermal. Interstellar's disc was
+  // modelled as very nearly isothermal, which is why it glows evenly out to
+  // the rim instead of collapsing to a bright ring like a real thin disc.
+  return uDiscTemp * pow(max(ratio, 1e-4), uDiscProfile);
 }
 
 /**
- * Cubic Hermite interpolation of u(phi) inside one integration step, used to
- * land exactly on the equatorial plane instead of stepping over it.
+ * The medium at a point in the disc, as two densities:
+ *   .x  hot gas, which both emits and absorbs
+ *   .y  cool dust, which only absorbs
+ *
+ * Splitting them is what produces dark lanes. If emission and opacity came
+ * from one field, dense gas would always be bright and nothing could ever be
+ * silhouetted against it.
+ *
+ * The disc is a flared slab of scale height H = uDiscHeight * r with a
+ * Gaussian vertical profile, and its structure is fractal noise sampled in
+ * the *co-rotating* frame, azimuth minus Omega(r) t. Differential rotation
+ * therefore winds it into trailing spirals on its own, with the inner disc
+ * lapping the outer disc exactly as fast as Kepler says it should.
+ *
+ * The noise is deliberately anisotropic - fine radially, coarse azimuthally -
+ * which is what makes long thin strands rather than blobs.
  */
-float hermite(float u0, float d0, float u1, float d1, float h, float t) {
-  float s = t / h;
-  float s2 = s * s;
-  float s3 = s2 * s;
-  return (2.0 * s3 - 3.0 * s2 + 1.0) * u0
-       + (s3 - 2.0 * s2 + s) * h * d0
-       + (-2.0 * s3 + 3.0 * s2) * u1
-       + (s3 - s2) * h * d1;
+vec2 discMedium(vec3 p, float r) {
+  float H = max(uDiscHeight, 0.015) * r;
+  float z = p.y / H;
+  float vert = exp(-z * z * 1.6);
+  if (vert < 0.003) return vec2(0.0);
+
+  float radial = smoothstep(uDiscInner * 0.90, uDiscInner * 1.30, r)
+               * (1.0 - smoothstep(uDiscOuter * 0.55, uDiscOuter, r));
+  if (radial < 0.002) return vec2(0.0);
+
+  float omega = uDiscSpin * pow(r, -1.5);
+  float lag = atan(p.z, p.x) - omega * uSimTime;
+  vec2 c = vec2(cos(lag), sin(lag));
+  float lr = log(r);
+
+  // Keep the radial-to-azimuthal frequency ratio moderate: push it too far
+  // and the strands close into concentric rings that alias into moire.
+  float n = fbm(vec3(c * 2.6, lr * 8.0), 4) * 0.72
+          + fbm(vec3(c * 6.4, lr * 21.0) + 31.7, 3) * 0.44;
+  // A wide density contrast is what makes a grazing line of sight worth
+  // looking at: it punches through the gaps and piles up in the strands,
+  // instead of averaging everything into a smooth wash.
+  float fil = smoothstep(0.26, 0.74, n);
+  float gas = mix(1.0, 0.03 + 1.9 * fil * fil, uDiscFilament);
+
+  // Cool dust rides higher above the midplane than the hot gas.
+  float dn = fbm(vec3(c * 3.2, lr * 10.5) - 12.3, 3) * 0.78
+           + fbm(vec3(c * 8.0, lr * 26.0) + 5.1, 2) * 0.32;
+  float dust = uDiscDust * smoothstep(0.40, 0.80, dn) * exp(-z * z * 0.6) * 2.4;
+
+  return vec2(gas * vert, dust) * radial;
+}
+
+/** Observed/emitted frequency ratio for gas on a circular geodesic at r. */
+float shiftFactor(float r, float b, float ny) {
+  float gGrav = sqrt(max(0.0, 1.0 - 3.0 / r)) / sqrt(max(1e-4, 1.0 - 2.0 / uCamDist));
+  float omega = uDiscSpin * pow(r, -1.5);
+  float gDopp = 1.0 / max(1e-3, 1.0 + omega * b * ny);
+  return mix(1.0, gGrav, uRedshift) * mix(1.0, gDopp, uDoppler);
 }
 
 /* ---------------------------------------------------------------- *
@@ -213,87 +266,72 @@ void rk4(float u, float du, float h, out float uo, out float duo) {
   duo = du + (h / 6.0) * (k1d + 2.0 * k2d + 2.0 * k3d + k4d);
 }
 
-struct Ray {
-  vec3 e1;      // radial basis vector of the orbital plane
-  vec3 e2;      // tangential basis vector, along the direction of travel
-  float ny;     // y component of the plane normal
-  float b;      // impact parameter L/E
-  float rObs;   // observer radius
-};
-
-/** Accumulate one disc crossing into the running colour. */
-void shadeDisc(Ray ry, float uc, float duc, float phic,
-               inout vec3 accum, inout float trans) {
-  float r = 1.0 / max(uc, 1e-6);
-  if (r < uDiscInner || r > uDiscOuter) return;
-
-  float cp = cos(phic), sp = sin(phic);
-  vec3 er = cp * ry.e1 + sp * ry.e2;
-  vec3 et = -sp * ry.e1 + cp * ry.e2;
-  vec3 pos = r * er;
-
-  // Direction of travel there: dP/dphi = (dr/dphi) er + r et, dr/dphi = -du/u^2
-  vec3 dir = normalize((-duc / (uc * uc)) * er + r * et);
-  float mu = max(abs(dir.y), 0.025);           // cosine to the disc normal
-  float alpha = 1.0 - exp(-uDiscOpacity / mu); // slab of optical depth tau/mu
-
-  // Frequency shift: gravitational + transverse part, then the beaming term.
-  float gGrav = sqrt(max(0.0, 1.0 - 3.0 / r)) / sqrt(max(1e-4, 1.0 - 2.0 / ry.rObs));
-  float omega = uDiscSpin * pow(r, -1.5);
-  float gDopp = 1.0 / max(1e-3, 1.0 + omega * ry.b * ry.ny);
-  float g = mix(1.0, gGrav, uRedshift) * mix(1.0, gDopp, uDoppler);
-
-  float Tem = discTemperature(r);
-  float Tobs = Tem * g;
-
-  // Density fluctuations, sheared by the differential rotation of the disc.
-  float az = atan(pos.z, pos.x);
-  float lag = az - omega * uSimTime;
-  vec3 q = vec3(cos(lag), sin(lag), log(r) * 2.4);
-  float turb = fbm(q * 3.4, 4) * 0.7 + fbm(q * 11.0 + 7.0, 3) * 0.45;
-  // Higher-order images squeeze the whole disc into a thin arc, so their
-  // detail is far below one pixel. Fading the turbulence towards its mean as
-  // the photon winds further is a cheap stand-in for filtering it, and stops
-  // the secondary image breaking up into dashes.
-  float order = smoothstep(1.2, 3.4, phic);
-  float emis = mix(1.0, 0.35 + 1.55 * turb, uDiscTurbulence * (1.0 - order));
-
-  // Soft outer edge; the inner edge is already zeroed by the T profile.
-  emis *= 1.0 - smoothstep(uDiscOuter * 0.80, uDiscOuter, r);
-
-  // I_obs = g^4 I_emit, and for a black body I ~ T^4, so writing the
-  // brightness as (T_obs / T_peak)^4 carries the beaming automatically.
-  float rel = Tobs / max(uDiscTemp, 1.0);
-  float intensity = rel * rel * rel * rel * emis * uDiscBrightness;
-
-  vec3 radiance = blackbody(Tobs) * intensity;
-  accum += trans * radiance * alpha;
-  trans *= 1.0 - alpha;
-}
-
-/** Orbiting companions, lensed along with everything else. */
-void shadeBodies(Ray ry, float uc, float phic,
-                 inout vec3 accum, inout float trans) {
-  float r = 1.0 / max(uc, 1e-6);
-  vec3 pos = r * (cos(phic) * ry.e1 + sin(phic) * ry.e2);
+/**
+ * Orbiting worlds, lensed along with everything else.
+ *
+ * Each integration step is a short chord, so an ordinary segment-sphere test
+ * catches the hit even though the ray as a whole is curved. Lighting treats
+ * the accretion disc as the only source, which puts the terminator exactly
+ * where it belongs: the lit crescent always faces the black hole.
+ *
+ * uBodyCol.a carries an emission temperature. Above 1 K the body is a star
+ * and glows on its own; at zero it is a planet, and .rgb is its albedo.
+ */
+bool hitBodies(vec3 a, vec3 bq, inout vec3 accum, inout float trans) {
+  bool hit = false;
   for (int k = 0; k < MAX_BODIES; k++) {
     if (k >= uBodyCount) break;
-    vec3 bp = uBodyPos[k].xyz;
+    vec3 centre = uBodyPos[k].xyz;
     float rad = uBodyPos[k].w;
-    float d = length(pos - bp);
-    if (d < rad * 2.5) {
-      // Soft-edged sphere; the width of the step sets how much of the body
-      // this sample is responsible for.
-      float cov = smoothstep(rad * 1.6, rad * 0.35, d);
-      float a = clamp(cov * 2.2, 0.0, 1.0);
-      vec3 col = blackbody(uBodyCol[k].a) * uBodyCol[k].rgb;
-      accum += trans * col * a;
-      trans *= 1.0 - a;
+    vec3 ab = bq - a;
+    float len2 = max(dot(ab, ab), 1e-12);
+    float t = clamp(dot(centre - a, ab) / len2, 0.0, 1.0);
+    float d = length(a + t * ab - centre);
+    if (d >= rad) continue;
+
+    // Step back along the chord to where it enters the sphere.
+    float back = sqrt(max(rad * rad - d * d, 0.0)) / sqrt(len2);
+    vec3 surf = a + max(t - back, 0.0) * ab;
+    vec3 n = normalize(surf - centre);
+
+    vec3 lit;
+    if (uBodyCol[k].a > 1.0) {
+      lit = blackbody(uBodyCol[k].a) * uBodyCol[k].rgb;
+    } else {
+      // A planet this close to a black hole is tidally locked, so its surface
+      // frame is built from the direction to the hole and the disc normal.
+      vec3 toHole = normalize(-centre);
+      vec3 fy = normalize(vec3(0.0, 1.0, 0.0) - toHole * toHole.y);
+      vec3 fx = cross(fy, toHole);
+      vec3 ln = vec3(dot(n, fx), dot(n, fy), dot(n, toHole));
+
+      float seed = float(k) * 17.3;
+      float land = fbm(ln * 2.3 + seed, 4);
+      float cloud = fbm(ln * 4.7 - seed, 3);
+      vec3 albedo = mix(uBodyCol[k].rgb * 0.40, uBodyCol[k].rgb, smoothstep(0.36, 0.64, land));
+      albedo = mix(albedo, vec3(0.92), smoothstep(0.54, 0.80, cloud) * 0.55);
+
+      // The disc is the lamp: warm, centred on the hole, and falling off as
+      // 1/r^2, which leaves an outer world a near-silhouette with only a thin
+      // crescent turned towards the light.
+      float dist = max(length(centre), 1.0);
+      vec3 lamp = blackbody(uDiscTemp) * uDiscBrightness * min(0.6, 260.0 / (dist * dist));
+      float lambert = max(dot(n, toHole), 0.0);
+      lit = albedo * lamp * (0.02 + 0.98 * pow(lambert, 0.75));
+
+      // Rim light where the disc grazes the limb.
+      float rim = pow(1.0 - max(dot(n, -normalize(ab)), 0.0), 3.5);
+      lit += lamp * rim * lambert * 0.7;
     }
+
+    accum += trans * lit;
+    trans = 0.0;
+    hit = true;
   }
+  return hit;
 }
 
-vec3 trace(vec3 ro, vec3 rd) {
+vec3 trace(vec3 ro, vec3 rd, float jitter) {
   vec3 accum = vec3(0.0);
   float trans = 1.0;
 
@@ -308,56 +346,91 @@ vec3 trace(vec3 ro, vec3 rd) {
     return cosPsi < 0.0 ? vec3(0.0) : skyColour(rd);
   }
 
-  Ray ry;
   vec3 N = cr / sinPsi;
-  ry.e1 = e1;
-  ry.e2 = normalize(cross(N, e1));
-  ry.ny = N.y;
-  ry.rObs = r0;
+  vec3 e2 = normalize(cross(N, e1));
+  float ny = N.y;
 
   // sqrt(1 - 2M/r) converts between the static observer's orthonormal frame
   // and Schwarzschild coordinates. Forgetting it is the classic way to get a
   // lensing render subtly but visibly wrong.
   float f0 = sqrt(max(1.0 - 2.0 / r0, 1e-4));
-  ry.b = r0 * sinPsi / f0;
+  float b = r0 * sinPsi / f0;
 
   float u = 1.0 / r0;
   float du = -cosPsi * f0 / (r0 * sinPsi);
   float phi = 0.0;
   float uEsc = 1.0 / uEscapeRadius;
 
-  // The photon's plane meets the equatorial plane where
-  // e1.y cos(phi) + e2.y sin(phi) = 0, so the crossings are known up front.
-  float ay = ry.e1.y;
-  float by = ry.e2.y;
-  bool coplanar = (ay * ay + by * by) < 1e-12;
-  float phiCross = 1e9;
-  if (!coplanar) {
-    phiCross = atan(-ay, by);
-    phiCross += ceil((2e-3 - phiCross) / PI) * PI;
-  }
+  float rLo = uDiscInner * 0.85;
+  float rHi = uDiscOuter * 1.05;
 
   for (int i = 0; i < MAX_STEPS; i++) {
     if (i >= uSteps) break;
 
+    float r = 1.0 / u;
+    float cp = cos(phi);
+    float sp = sin(phi);
+    vec3 er = cp * e1 + sp * e2;
+    vec3 et = -sp * e1 + cp * e2;
+    vec3 pos = r * er;
+
+    float drdphi = -du / (u * u);
+    float fr = max(1.0 - 2.0 / r, 1e-3);
+    // Proper length and vertical drift per radian of orbital angle.
+    float dsdphi = sqrt(drdphi * drdphi / fr + r * r);
+    float dydphi = abs(drdphi * er.y + r * et.y);
+
     // Coarse steps where spacetime is nearly flat, fine steps near the hole.
-    float h = uStepScale * 0.028 * (1.0 + 3.4 * exp(-70.0 * u));
-    if (du < 0.0) h = min(h, (0.45 * u) / -du);   // never overshoot u = 0
+    float h = uStepScale * 0.030 * (1.0 + 3.4 * exp(-70.0 * u));
+    if (du < 0.0) h = min(h, (0.45 * u) / -du);
+
+    bool inReach = uDiscEnabled > 0.5 && r > rLo && r < rHi;
+    float H = max(uDiscHeight, 0.015) * r;
+    if (inReach) {
+      // Outside the slab, step no further than the distance to it; inside,
+      // crawl, so the vertical profile is sampled rather than jumped over.
+      float gap = abs(pos.y) - 1.3 * H;
+      if (gap > 0.0) {
+        h = min(h, gap / max(dydphi, 1e-4));
+      } else {
+        h = min(h, (0.5 * H) / max(dydphi, 1e-4));
+        h = min(h, (0.6 * H + 0.03 * r) / dsdphi);
+      }
+    }
+    h = max(h, 2e-4);
 
     float u1, du1;
     rk4(u, du, h, u1, du1);
     float phi1 = phi + h;
+    float r1 = 1.0 / max(u1, 1e-6);
+    vec3 pos1 = r1 * (cos(phi1) * e1 + sin(phi1) * e2);
 
-    if (uDiscEnabled > 0.5 && phiCross <= phi1 && phiCross > phi) {
-      float t = phiCross - phi;
-      float uc = hermite(u, du, u1, du1, h, t);
-      float duc = mix(du, du1, t / h);
-      shadeDisc(ry, uc, duc, phiCross, accum, trans);
-      phiCross += PI;
+    if (inReach) {
+      // One midpoint sample of the emitting, absorbing slab. Emission and
+      // opacity both come from the same density, so thin wisps glow and let
+      // the far side through while dense strands block it - which is what
+      // keeps both lensed arcs of the disc visible at once.
+      vec3 pm = mix(pos, pos1, jitter);
+      if (abs(pm.y) < 2.8 * H) {
+        float rm = length(pm);
+        vec2 med = discMedium(pm, rm);
+        float ext = med.x + med.y;
+        if (ext > 1e-4) {
+          float alpha = 1.0 - exp(-(uDiscOpacity / max(2.0 * H, 1e-3)) * ext * dsdphi * h);
+          float Tobs = discTemperature(rm) * shiftFactor(rm, b, ny);
+          float rel = Tobs / max(uDiscTemp, 1.0);
+          // Thermal source function: I ~ T^4, with the g^4 beaming riding
+          // along for free because the shift was folded into T_obs. Only the
+          // gas fraction of the opacity emits; the dust just blocks.
+          vec3 src = blackbody(Tobs) * (rel * rel * rel * rel)
+                   * uDiscBrightness * (med.x / ext);
+          accum += trans * src * alpha;
+          trans *= 1.0 - alpha;
+        }
+      }
     }
-    if (uBodyCount > 0) {
-      shadeBodies(ry, 0.5 * (u + u1), phi + 0.5 * h, accum, trans);
-    }
+
+    if (uBodyCount > 0 && hitBodies(pos, pos1, accum, trans)) return accum;
 
     u = u1;
     du = du1;
@@ -370,12 +443,12 @@ vec3 trace(vec3 ro, vec3 rd) {
     if (u <= uEsc && du < 0.0) {
       // u = A sin(phiInf - phi) far out, so the asymptote is exact:
       float phiInf = phi + atan(u, -du);
-      vec3 out3 = cos(phiInf) * ry.e1 + sin(phiInf) * ry.e2;
+      vec3 out3 = cos(phiInf) * e1 + sin(phiInf) * e2;
       // Starlight is blueshifted on the way down to the observer.
       float blue = 1.0 / sqrt(max(1e-4, 1.0 - 2.0 / r0));
       return accum + trans * skyColour(normalize(out3)) * mix(1.0, blue * blue, uRedshift);
     }
-    if (trans < 0.004) return accum;
+    if (trans < 0.003) return accum;
   }
   // Ran out of steps: these are rays spiralling at the photon sphere, which
   // overwhelmingly end up inside the horizon.
@@ -391,6 +464,9 @@ void main() {
     + uForward);
 
   // Linear HDR radiance; bloom and tone mapping happen in the post chain.
-  outColor = vec4(trace(uCamPos, rd) * uGain, 1.0);
+  // Dither where inside each step the medium is sampled, so the march reads
+  // as grain rather than as concentric bands.
+  float jitter = 0.18 + 0.64 * hash13(vec3(gl_FragCoord.xy, 1.0));
+  outColor = vec4(trace(uCamPos, rd, jitter) * uGain, 1.0);
 }
 `;
