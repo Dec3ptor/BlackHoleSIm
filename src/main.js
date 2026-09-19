@@ -312,6 +312,12 @@ panel.refresh();
 hud.refresh();
 requestAnimationFrame(frame);
 
+// Which commit is actually being served - the answer to "did my deploy land?"
+const buildId = document.querySelector('meta[name="build"]')?.content || 'dev';
+const buildEl = document.getElementById('build-id');
+if (buildEl) buildEl.textContent = buildId;
+console.info(`Schwarzschild build ${buildId}`);
+
 // Handy for poking at the simulation from the console.
 window.sim = {
   state, lensed, spacetime, renderer, lensedCamera, spacetimeCamera, setView,

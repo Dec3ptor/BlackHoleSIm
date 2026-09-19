@@ -42,6 +42,23 @@ jobs:
       #   Settings -> Pages -> Build and deployment -> Source: GitHub Actions
       # The workflow token is not permitted to create the Pages site itself.
       - uses: actions/configure-pages@v5
+      # Browsers - phones especially - hold onto ES modules well past the
+      # short max-age Pages sends, so a deploy can look like it did nothing.
+      # Stamping the commit into every own-module URL makes that impossible:
+      # new commit, new URLs. Bare specifiers are left alone so the pinned
+      # three.js in vendor/ stays cached, which is the point of vendoring it.
+      - name: Stamp the build into module URLs
+        run: |
+          V="${GITHUB_SHA::12}"
+          # '#' delimits the s commands, because '|' is needed for alternation.
+          find src -name '*.js' -print0 \
+            | xargs -0 sed -i -E "s#(from '(\./|\.\./)[^']*\.js)'#\1?v=$V'#g"
+          sed -i -E "s#(src=\"\./src/main\.js)\"#\1?v=$V\"#" index.html
+          sed -i -E "s#(href=\"styles/main\.css)\"#\1?v=$V\"#" index.html
+          sed -i -E "s#(<meta name=\"build\" content=\")[^\"]*#\1$V#" index.html
+          echo "stamped build $V"
+          grep -n 'name="build"' index.html
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: '.'
