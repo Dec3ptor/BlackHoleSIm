@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Schwarzschild — a real-time black hole simulator</title>
+<meta name="description" content="A real-time black hole simulator that renders gravitational lensing by integrating null geodesics of the Schwarzschild metric on the GPU, with a relativistic accretion disc and exact orbital dynamics.">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="Schwarzschild — a real-time black hole simulator">
+<meta property="og:description" content="Gravitational lensing traced photon by photon, a Doppler-beamed accretion disc, and exact geodesic orbits. Runs in the browser.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles/main.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body data-view="lensed">
+
+<div id="viewport"></div>
+
+<header id="topbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <div>
+      <h1>Schwarzschild</h1>
+      <p>Null geodesics, traced one photon per pixel</p>
+    </div>
+  </div>
+  <nav class="actions">
+    <button id="btn-help" type="button">About</button>
+    <button id="btn-shot" type="button">Save image</button>
+    <button id="btn-chrome" type="button" title="Hide the interface (H)">Hide UI</button>
+  </nav>
+</header>
+
+<aside id="panel" aria-label="Simulation controls"></aside>
+<section id="hud" aria-label="Readouts"></section>
+
+<footer id="hintbar">
+  <span><kbd>drag</kbd> orbit</span>
+  <span><kbd>scroll</kbd> zoom</span>
+  <span><kbd>V</kbd> view</span>
+  <span><kbd>G</kbd> gravity</span>
+  <span><kbd>D</kbd> disc</span>
+  <span><kbd>space</kbd> pause</span>
+  <span><kbd>H</kbd> hide UI</span>
+  <span><kbd>P</kbd> screenshot</span>
+  <span><kbd>F</kbd> fullscreen</span>
+</footer>
+
+<div id="loading"><div class="spinner"></div><p>Compiling geodesic integrator…</p></div>
+
+<div id="nowebgl" hidden>
+  <div class="card">
+    <h2>This simulator needs WebGL 2</h2>
+    <p>Every frame integrates a curved-spacetime light path for each pixel on the GPU,
+       which needs WebGL 2. Try a recent Chrome, Firefox, Edge or Safari, and check that
+       hardware acceleration is switched on.</p>
+  </div>
+</div>
+
+<dialog id="about">
+  <article>
+    <h2>What you are looking at</h2>
+    <p>
+      Every pixel on screen is a photon traced <em>backwards</em> from your eye through the
+      curved spacetime around a non-rotating black hole. Instead of bending light with an
+      approximation, the renderer integrates the exact null geodesic equation of the
+      Schwarzschild metric,
+    </p>
+    <p class="eq">d²u/dφ² = −u + 3<i>M</i>u², &nbsp; u = 1/<i>r</i></p>
+    <p>
+      with a fourth-order Runge–Kutta step per sample, and follows the ray until it either
+      falls through the horizon, hits the disc, or escapes to the sky. That single equation
+      produces all of it: the black shadow, the bright photon ring at its edge, the Einstein
+      ring of the background stars, and the far side of the disc lifted up over the top of
+      the hole and folded under the bottom.
+    </p>
+
+    <h3>The physics that is actually simulated</h3>
+    <ul>
+      <li><b>Shadow and photon ring.</b> Photons with impact parameter below
+        <i>b</i>&nbsp;=&nbsp;3√3&nbsp;<i>M</i> can never escape, so the shadow has an angular
+        radius set by that number and nothing else.</li>
+      <li><b>Accretion disc.</b> A Shakura–Sunyaev thin disc, temperature
+        <i>T</i>&nbsp;∝&nbsp;[(1−√(<i>r</i><sub>in</sub>/<i>r</i>))/<i>r</i>³]<sup>1/4</sup>,
+        coloured by integrating Planck's law against the CIE colour-matching functions.</li>
+      <li><b>Doppler beaming and gravitational redshift.</b> The observed frequency ratio
+        <i>g</i> is computed from the emitter's four-velocity on its circular geodesic; the
+        brightness follows as <i>g</i>⁴. That is why one side of the disc is fiercely bright
+        and blue while the other is dim and red.</li>
+      <li><b>Orbits.</b> Test particles follow timelike geodesics, so they precess, they have
+        an innermost stable circular orbit at 6&nbsp;<i>r</i><sub>g</sub>, and inside it they
+        spiral in and are lost.</li>
+      <li><b>The spacetime view</b> draws Flamm's paraboloid, <i>z</i> = 2√(<i>r</i><sub>s</sub>(<i>r</i>−<i>r</i><sub>s</sub>)),
+        which is the genuine isometric embedding of the equatorial slice rather than a
+        rubber-sheet cartoon.</li>
+    </ul>
+
+    <h3>What is not simulated</h3>
+    <p>
+      The hole does not rotate: this is Schwarzschild, not Kerr, so there is no frame dragging
+      and no ergosphere. The camera is treated as a static observer, so there is no aberration
+      from its own motion. The disc is geometrically thin and its light does not heat anything.
+      Turn <b>Curved spacetime</b> off to see the same scene with light travelling in straight
+      lines — the difference is the whole point.
+    </p>
+
+    <p class="foot">
+      Open source. Physics in <code>src/core/</code>, GPU integrator in
+      <code>src/render/lensingShader.js</code>, and a test suite that pins both against the
+      closed-form results of general relativity.
+    </p>
+    <form method="dialog"><button>Close</button></form>
+  </article>
+</dialog>
+
+<script type="module" src="./src/main.js"></script>
+<script type="module">
+  const dlg = document.getElementById('about');
+  document.getElementById('btn-help').addEventListener('click', () => dlg.showModal());
+  document.getElementById('btn-chrome').addEventListener('click',
+    () => document.body.classList.toggle('chrome-hidden'));
+  document.getElementById('btn-shot').addEventListener('click',
+    () => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyP' })));
+</script>
+</body>
+</html>

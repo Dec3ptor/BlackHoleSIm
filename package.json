@@ -1,0 +1,12 @@
+{
+  "name": "schwarzschild",
+  "version": "1.0.0",
+  "description": "A real-time black hole simulator: gravitational lensing by direct integration of Schwarzschild null geodesics on the GPU.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test tests/"
+  },
+  "license": "MIT"
+}
