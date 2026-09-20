@@ -108,6 +108,40 @@ off as `√r`. A fan of null geodesics can be overlaid, straddling the critical 
 parameter so you can watch capture begin. The surface really is that shallow; the depth
 slider exaggerates it for legibility and 1.00× is the truth.
 
+### The relativistic jet
+
+![M87-style jet: approaching side beamed bright, counter-jet nearly extinguished](assets/screenshot-jet.png)
+
+A jet launched along the spin axis, with shape, speed and brightness taken from the VLBI
+measurements of M87 rather than drawn by eye:
+
+- **Parabolic collimation**, `R ∝ z^0.58` — the measured profile from the jet base out to
+  the Bondi radius. That produces the very wide base (~62° here) narrowing to ~11°.
+- **Acceleration** as `Γ ∝ z^0.42`, the magnetohydrodynamic result that accompanies a
+  `z ∝ R^1.7` boundary.
+- **Optically thin synchrotron**, so it adds light without blocking any.
+
+Two observed features emerge from the physics rather than being drawn in:
+
+| | Measured on the render | Observed |
+| --- | --- | --- |
+| Jet / counter-jet brightness | 11.6 | 10–15 (VLBI, M87) |
+| …with beaming exponent set to 0 | 1.10 | — |
+
+The second row is the control: switch the `δ^(2+α)` boost off and the two jets become
+identical, which is how you know the asymmetry is Doppler beaming and not decoration.
+
+It is also **limb-brightened**, and the reason is worth stating precisely: the Doppler
+factor peaks at a viewing angle of about 1/Γ, so a fast spine seen from a small angle has
+already beamed its light *past* the observer while the slower sheath is still pointed at
+them. The edges come out brighter than the middle because the spine outruns the sheath —
+not because a hollow tube was drawn.
+
+Sources: [the limb-brightened jet of M87 down to 7 r_s](https://www.aanda.org/articles/aa/full_html/2018/08/aa32921-18/aa32921-18.html),
+[86 GHz VLBI imaging of the jet base](https://iopscience.iop.org/article/10.3847/0004-637X/817/2/131),
+[collimation and acceleration profiles](https://arxiv.org/html/1908.05485),
+[kinematics in the collimation zone](https://arxiv.org/pdf/1911.02279).
+
 ## M87*, the real photograph
 
 The **M87* — the EHT image** preset reconstructs the first photograph of a black hole

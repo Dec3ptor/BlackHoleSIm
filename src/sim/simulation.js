@@ -54,10 +54,17 @@ export const PRESETS = {
     massSolar: 6.5e9,
     distanceMpc: 16.8,
     mdotEdd: 1e-5,
-    blurb: 'The first black hole ever imaged, in 2019. The Event Horizon Telescope '
-      + 'resolved exactly the bright asymmetric ring this renderer produces.',
+    blurb: 'The galaxy whose jet has been tracked by VLBI for decades. Seen 17° off '
+      + 'the jet axis, as M87 really is: the approaching jet is beamed towards us and '
+      + 'the counter-jet is all but extinguished by the same factor working the other '
+      + 'way. The jet is limb-brightened because its spine outruns its sheath.',
     disc: { inner: 6, outer: 18, opacity: 2.8, height: 0.07, filament: 0.8, dust: 0.35, brightness: 2.2, profile: 1.0, peakTempVisual: 6200 },
-    camera: { distance: 48, inclinationDeg: 17, fovDeg: 42 },
+    jet: { enabled: true, power: 1.6 },
+    // Shown side-on so the jet's structure and the beaming asymmetry are
+    // visible. M87 is really viewed 17° off the jet axis - set the
+    // inclination there and you are looking straight down the barrel, which
+    // is exactly why its jet appears so bright and so foreshortened.
+    camera: { distance: 155, inclinationDeg: 72, fovDeg: 46 },
   },
   'cygnus-x1': {
     label: 'Cygnus X-1',
@@ -135,6 +142,25 @@ export const DEFAULTS = {
     spin: 1,
     peakTempVisual: 3400, // kelvin used for rendering in "normalised" mode
     trueTemperature: false,
+  },
+
+  // Relativistic jet. Defaults follow the VLBI measurements of M87: parabolic
+  // collimation R ~ z^0.58, bulk flow accelerating as Gamma ~ z^0.42, and a
+  // spine that outruns the sheath, which is what limb-brightens it.
+  jet: {
+    enabled: false,
+    power: 1.6,
+    inner: 3,
+    length: 160,
+    base: 6,
+    shape: 0.58,
+    gammaSpine: 10,
+    gammaSheath: 2.6,
+    accel: 300,
+    beamExp: 2.7,
+    falloff: 1.9,
+    helix: 2.2,
+    temperature: 13000,
   },
 
   optics: {
@@ -392,6 +418,8 @@ export function applyPreset(state, key) {
   Object.assign(state.disc, p.disc);
   Object.assign(state.camera, p.camera);
   if (p.optics) Object.assign(state.optics, p.optics);
+  state.jet.enabled = false;
+  if (p.jet) Object.assign(state.jet, p.jet);
   return state;
 }
 

@@ -49,6 +49,19 @@ uniform float uDiscDust;       // cool dust: absorbs without emitting
 uniform float uEmission;       // 0 = thermal black body, 1 = optically thin synchrotron
 uniform float uEmisIndex;      // radial emissivity power law, j ~ (r_in/r)^index
 uniform float uBeamExp;        // Doppler boost exponent; 3 for specific intensity
+
+uniform float uJet;            // jet brightness; 0 switches it off entirely
+uniform float uJetInner;       // launch height above the hole, in r_g
+uniform float uJetLength;      // how far the jet is drawn, in r_g
+uniform float uJetBase;        // jet radius at z = 10 r_g
+uniform float uJetShape;       // collimation exponent: R ~ z^uJetShape
+uniform float uJetGammaSpine;  // terminal bulk Lorentz factor on the axis
+uniform float uJetGammaSheath; // terminal bulk Lorentz factor at the edge
+uniform float uJetAccel;       // height over which the flow reaches it
+uniform float uJetBeamExp;     // 2 + spectral index, for a continuous jet
+uniform float uJetFalloff;     // emissivity decline along the jet
+uniform float uJetHelix;       // twist of the magnetic filaments
+uniform float uJetTemp;
 uniform float uDiscTemp;      // peak effective temperature, kelvin
 uniform float uDiscProfile;   // 1 = physical r^-3/4 law, 0 = isothermal
 uniform float uDiscSpin;      // +1 prograde, -1 retrograde
@@ -267,6 +280,80 @@ vec2 discMedium(vec3 p, float r) {
   return vec2(gas * vert, dust) * radial;
 }
 
+/**
+ * A relativistic jet, of the kind M87 launches.
+ *
+ * Shape, speed and brightness all follow the VLBI measurements rather than
+ * being drawn by eye:
+ *
+ *  - The jet is collimated *parabolically*, R ~ z^0.58, which is what VLBI
+ *    finds from the jet base out to the Bondi radius before it goes conical.
+ *    That gives the very wide base - tens of degrees - narrowing with height.
+ *  - The flow accelerates as Gamma ~ z^0.42, the magnetohydrodynamic result
+ *    that goes with a z ~ R^1.7 boundary.
+ *  - The spine runs faster than the sheath. This is what makes the jet
+ *    *limb-brightened*, and it is worth being precise about why: the Doppler
+ *    factor peaks at a viewing angle of about 1/Gamma, so a fast spine seen
+ *    from 17 degrees has already beamed its light past the observer, while
+ *    the slower sheath is still pointed at them. The edges therefore come out
+ *    brighter than the middle, which is exactly what is observed - and it
+ *    falls out of the velocity profile rather than being painted on.
+ *  - The approaching and receding jets differ by delta^(2+alpha), which is
+ *    why the counter-jet all but vanishes.
+ *
+ * Emission is optically thin synchrotron, so the jet adds light without
+ * blocking any: the disc and the sky behind it still show through.
+ *
+ * toObs must point from the emitting parcel towards the observer. Rays are
+ * traced backwards, so that is the opposite of the marching direction - get
+ * the sign wrong and the beaming inverts, lighting up the counter-jet and
+ * extinguishing the one pointed at you.
+ */
+vec3 jetSample(vec3 p, vec3 toObs) {
+  float z = abs(p.y);
+  if (z < uJetInner || z > uJetLength) return vec3(0.0);
+
+  float rho = length(p.xz);
+  float R = uJetBase * pow(z / 10.0, uJetShape);
+  float x = rho / max(R, 1e-3);
+  if (x > 1.2) return vec3(0.0);
+
+  // Bulk flow: accelerating with height, faster on the axis than at the edge.
+  float acc = min(1.0, pow(z / max(uJetAccel, 1.0), 0.42));
+  float gTerm = mix(uJetGammaSheath, uJetGammaSpine, clamp(1.0 - x * x, 0.0, 1.0));
+  float gam = max(1.0 + (gTerm - 1.0) * acc, 1.0001);
+  float beta = sqrt(max(0.0, 1.0 - 1.0 / (gam * gam)));
+
+  // Streamline direction. For R ~ z^k a parcel drifts outwards as it rises at
+  // d(rho)/dz = k rho / z, so the flow is not quite parallel to the axis.
+  vec3 rhat = rho > 1e-4 ? vec3(p.x, 0.0, p.z) / rho : vec3(1.0, 0.0, 0.0);
+  vec3 vhat = normalize(vec3(0.0, sign(p.y), 0.0)
+                      + rhat * (uJetShape * rho / max(z, 1e-3)));
+
+  // dir is the photon's direction of travel, i.e. towards the observer.
+  float delta = 1.0 / max(gam * (1.0 - beta * dot(vhat, toObs)), 1e-3);
+
+  // A hollow, sheath-weighted emission shell, fading along the jet and broken
+  // into knots by a helical field.
+  // Hollow: the emission lives in a sheath, which is what a line of sight
+  // through a tube limb-brightens into two rails.
+  float shell = exp(-pow((x - 0.80) / 0.20, 2.0)) + 0.12;
+  // Clamped at the launch height: without it the power law spikes hard enough
+  // near z = 0 to swamp the rest of the jet.
+  float fall = pow(10.0 / max(z, uJetInner), uJetFalloff);
+  float helix = atan(p.z, p.x) - uJetHelix * log(max(z, 1.0)) - uSimTime * 0.02 * sign(p.y);
+  float knots = fbm(vec3(cos(helix), sin(helix), z * 0.085) * 2.4, 4) * 1.1
+              + fbm(vec3(cos(helix), sin(helix), z * 0.30) * 5.0 + 9.1, 3) * 0.5;
+  knots = 0.25 + 1.5 * smoothstep(0.25, 0.85, knots);
+
+  float gg = sqrt(max(0.0, 1.0 - 2.0 / max(length(p), 2.05)));
+  // 0.012 puts an approaching jet at roughly unit radiance once integrated
+  // along a typical line of sight, so uJet reads as a plain brightness dial.
+  float radiance = 0.012 * uJet * shell * fall * knots
+                 * pow(delta, uJetBeamExp) * mix(1.0, gg, uRedshift);
+  return blackbody(uJetTemp) * radiance;
+}
+
 /** Observed/emitted frequency ratio for gas on a circular geodesic at r. */
 float shiftFactor(float rIn, float b, float ny) {
   // No circular geodesic exists inside the ISCO; real flows plunge from there
@@ -425,7 +512,7 @@ vec3 trace(vec3 ro, vec3 rd, float jitter, out vec3 skyDir, out float skyWeight)
     // Everything below needs the ray's actual position. Most pixels are sky:
     // their rays never come near the disc and carry no bodies, so they skip
     // two transcendentals and a square root on every single step.
-    bool needPos = inReach || uBodyCount > 0;
+    bool needPos = inReach || uBodyCount > 0 || uJet > 0.0;
     vec3 pos = vec3(0.0);
     vec3 er = vec3(0.0);
     vec3 et = vec3(0.0);
@@ -443,6 +530,14 @@ vec3 trace(vec3 ro, vec3 rd, float jitter, out vec3 skyDir, out float skyWeight)
       dsdphi = sqrt(drdphi * drdphi / fr + r * r);
       float dydphi = abs(drdphi * er.y + r * et.y);
 
+      if (uJet > 0.0) {
+        // Keep steps short enough to resolve the jet's width.
+        float zj = abs(pos.y);
+        if (zj < uJetLength * 1.15) {
+          float Rj = uJetBase * pow(max(zj, 1.0) / 10.0, uJetShape);
+          if (length(pos.xz) < Rj * 1.6) h = min(h, (0.22 * Rj + 0.02 * r) / dsdphi);
+        }
+      }
       if (inReach) {
         // Outside the slab, step no further than the distance to it; inside,
         // crawl, so the vertical profile is sampled rather than jumped over.
@@ -498,6 +593,21 @@ vec3 trace(vec3 ro, vec3 rd, float jitter, out vec3 skyDir, out float skyWeight)
             trans *= 1.0 - alpha;
           }
         }
+      }
+    }
+
+    if (uJet > 0.0 && needPos) {
+      // Optically thin: the jet adds light along the ray without absorbing
+      // any, so whatever lies behind it still shows through.
+      vec3 seg = pos1 - pos;
+      float segLen = length(seg);
+      if (segLen > 1e-6) {
+        vec3 travel = seg / segLen;
+        vec3 jm = mix(pos, pos1, jitter);
+        // travel runs away from the camera; the photon goes the other way.
+        vec3 je = jetSample(jm, -travel);
+        if (uEmission > 0.5) radio += dot(je, vec3(0.3333)) * segLen;
+        else accum += trans * je * segLen;
       }
     }
 

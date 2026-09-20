@@ -43,6 +43,19 @@ export function createBlackHoleView() {
     uEmission: { value: 0 },
     uEmisIndex: { value: 2.0 },
     uBeamExp: { value: 3.0 },
+
+    uJet: { value: 0 },
+    uJetInner: { value: 3 },
+    uJetLength: { value: 160 },
+    uJetBase: { value: 6 },
+    uJetShape: { value: 0.58 },
+    uJetGammaSpine: { value: 10 },
+    uJetGammaSheath: { value: 2.6 },
+    uJetAccel: { value: 300 },
+    uJetBeamExp: { value: 2.7 },
+    uJetFalloff: { value: 1.9 },
+    uJetHelix: { value: 2.2 },
+    uJetTemp: { value: 13000 },
     uDiscTemp: { value: 5000 },
     uDiscProfile: { value: 0.35 },
     uDiscSpin: { value: 1 },
@@ -119,6 +132,20 @@ export function createBlackHoleView() {
     uniforms.uEmission.value = d.emission === 'synchrotron' ? 1 : 0;
     uniforms.uEmisIndex.value = d.emisIndex;
     uniforms.uBeamExp.value = d.beamExp;
+
+    const j = state.jet;
+    uniforms.uJet.value = j.enabled ? j.power : 0;
+    uniforms.uJetInner.value = j.inner;
+    uniforms.uJetLength.value = j.length;
+    uniforms.uJetBase.value = j.base;
+    uniforms.uJetShape.value = j.shape;
+    uniforms.uJetGammaSpine.value = j.gammaSpine;
+    uniforms.uJetGammaSheath.value = j.gammaSheath;
+    uniforms.uJetAccel.value = j.accel;
+    uniforms.uJetBeamExp.value = j.beamExp;
+    uniforms.uJetFalloff.value = j.falloff;
+    uniforms.uJetHelix.value = j.helix;
+    uniforms.uJetTemp.value = j.temperature;
     uniforms.uDiscTemp.value = renderDiscTemperature(state);
     uniforms.uDiscProfile.value = d.profile;
     uniforms.uDiscSpin.value = d.spin;

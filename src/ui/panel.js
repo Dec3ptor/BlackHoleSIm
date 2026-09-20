@@ -237,6 +237,40 @@ export function buildPanel(root, state, onChange) {
     format: (v) => v.toFixed(2),
   });
 
+  const jet = section('Relativistic jet', false);
+  toggle(jet, {
+    label: 'Jet', path: 'jet.enabled',
+    hint: 'Optically thin synchrotron along the spin axis. Shape and speed follow '
+      + 'the VLBI measurements of M87.',
+  });
+  slider(jet, { label: 'Power', path: 'jet.power', min: 0, max: 4 });
+  slider(jet, {
+    label: 'Collimation', path: 'jet.shape', min: 0.3, max: 1.2, step: 0.01,
+    format: (v) => `R ∝ z^${v.toFixed(2)}`,
+    hint: '0.58 is the measured parabolic profile; 1.00 would be a straight cone.',
+  });
+  slider(jet, { label: 'Base radius', path: 'jet.base', min: 1, max: 20, step: 0.25,
+    format: (v) => `${v.toFixed(1)} r_g at z=10` });
+  slider(jet, { label: 'Length', path: 'jet.length', min: 20, max: 400, step: 5,
+    format: (v) => `${v.toFixed(0)} r_g` });
+  slider(jet, {
+    label: 'Spine Γ', path: 'jet.gammaSpine', min: 1.2, max: 25, step: 0.1,
+    format: (v) => `Γ = ${v.toFixed(1)}`,
+    hint: 'The spine outrunning the sheath is what limb-brightens the jet: at '
+      + 'these viewing angles a faster flow has beamed its light past you.',
+  });
+  slider(jet, { label: 'Sheath Γ', path: 'jet.gammaSheath', min: 1.05, max: 15, step: 0.05,
+    format: (v) => `Γ = ${v.toFixed(2)}` });
+  slider(jet, {
+    label: 'Beaming exponent', path: 'jet.beamExp', min: 0, max: 5, step: 0.1,
+    format: (v) => `δ^${v.toFixed(1)}`,
+    hint: '2 + spectral index for a continuous jet. Set it to 0 and the '
+      + 'counter-jet reappears at full brightness.',
+  });
+  slider(jet, { label: 'Helical twist', path: 'jet.helix', min: 0, max: 8, step: 0.1 });
+  slider(jet, { label: 'Falloff', path: 'jet.falloff', min: 0.5, max: 4, step: 0.05,
+    format: (v) => `j ∝ z^-${v.toFixed(2)}` });
+
   const rel = section('Relativity');
   toggle(rel, {
     label: 'Curved spacetime', path: 'gr',
