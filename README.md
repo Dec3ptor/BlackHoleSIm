@@ -40,8 +40,10 @@ That single equation, integrated honestly, produces:
   `b = 3√3 M ≈ 5.196 M`. Nothing else goes into it.
 - **The photon ring** at the shadow's edge, where light winds around the hole before
   escaping, and the higher-order images of the disc packed just inside it.
-- **Einstein rings** — background stars smeared into concentric arcs, with the star
-  directly behind the hole appearing as a complete ring.
+- **Einstein rings** — a source directly behind the hole images as a complete ring. The
+  renderer puts the first one at 15.857°, against 15.897° from integrating the geodesic
+  equation independently: **0.25%**. Higher orders pile up onto the photon ring exactly as
+  they should, the second at 1.0012× the shadow radius and the third at 1.0000×.
 - **The folded disc**: the far side of the accretion disc lifted up over the top of the
   hole and wrapped underneath it, because the light from it bends around.
 
@@ -222,6 +224,41 @@ re-run the latest workflow; every later push deploys on its own.
 Performance scales by resolution, not by physics: the renderer drops the render scale to
 hold frame rate and never reduces the integration accuracy behind your back. Both are
 exposed under **Quality**.
+
+## How accurate is the lensing of the stars?
+
+The deflection is exact and the magnification follows from it, because magnification *is*
+the Jacobian of the sky mapping — get the mapping right and the magnification comes free.
+Measured against an independent integration: the first Einstein ring lands within 0.25%
+(above). Surface brightness is conserved automatically, since the sky is a function
+sampled at the deflected direction, and that makes the flux magnification come out right
+too.
+
+Two honest caveats:
+
+- **The stars are not point sources.** Each is a disc a few pixels across — about 13
+  arcminutes, roughly the Moon. Real stars are under 0.05 arcsec, so they are ~10⁵ times
+  smaller. This is not a modelling shortcut that could be removed: at any sane field of
+  view a pixel already subtends several arcminutes, so a star *cannot* be drawn at its
+  true size. The consequence is that a lensed star stretches into a visible arc at
+  constant surface brightness, where a real point source would stay point-like and simply
+  brighten by the magnification factor. The total flux is the same either way — only its
+  distribution differs.
+- **Near the shadow the sky is compressed enormously**, and the higher-order images there
+  are demagnified by ~10⁻⁵. Point-sampling one direction per pixel used to draw those at
+  full surface brightness, which showed up as bright single-pixel speckle hugging the
+  shadow edge. The star field is now filtered by the pixel's sky footprint, measured from
+  screen-space derivatives: where a pixel spans more sky than a star subtends, the star is
+  widened to the footprint and dimmed by the area ratio, which is what a mip level does.
+  Speckle at the shadow edge went from a peak of 143/255 to 4/255 with the open sky
+  unchanged (luminance 0.560 → 0.559).
+
+Light never appears *inside* the shadow: a ray that crosses the horizon returns the
+emission it gathered on the way in and nothing else. Measured on a starfield-only render,
+the shadow interior is exactly zero — not one pixel above black. Anything that looks like
+a star in front of the hole is either disc emission genuinely in front of it, or the
+optically thin outer disc letting the background through, which is correct for a medium
+of that density.
 
 ## Performance
 

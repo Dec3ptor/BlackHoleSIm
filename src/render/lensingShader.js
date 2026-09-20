@@ -121,7 +121,17 @@ float fbm(vec3 p, int octaves) {
  *  Background sky
  * ---------------------------------------------------------------- */
 
-vec3 starLayer(vec3 dir, float scale, float cut, float size, float bright) {
+vec3 starLayer(vec3 dir, float scale, float cut, float size, float bright, float foot) {
+  // foot is the angular radius of sky this pixel covers, in cell units.
+  // Where the lens compresses the sky - hard against the shadow, where the
+  // higher-order images pile up - one pixel spans far more sky than a star
+  // subtends. A point source there must be spread over the pixel, not drawn
+  // at full surface brightness wherever a sample happens to land on it.
+  // Widening the star to the footprint and dimming by the area ratio is the
+  // same bookkeeping a mip level does, and it is what turns the speckle at
+  // the shadow's edge into the faint smooth glow the magnification implies.
+  float eff = max(size, foot);
+  float dim = (size * size) / (eff * eff);
   vec3 p = dir * scale;
   vec3 base = floor(p - 0.5);
   vec3 sum = vec3(0.0);
@@ -139,9 +149,9 @@ vec3 starLayer(vec3 dir, float scale, float cut, float size, float bright) {
     // 3D distance turns every star into a clipped square of its cell.
     vec3 sdir = normalize(id + 0.5 + (h - 0.5) * 0.24);
     float d = length(dir - sdir) * scale;
-    if (d > size) continue;
-    float core = smoothstep(size, 0.0, d);
-    core *= core;
+    if (d > eff) continue;
+    float core = smoothstep(eff, 0.0, d);
+    core *= core * dim;
     // Rough main-sequence mix: mostly cool dwarfs, a few hot blue giants.
     float T = mix(2700.0, 24000.0, h.x * h.x * h.x);
     // A long-tailed magnitude distribution gives a handful of standouts,
@@ -153,16 +163,16 @@ vec3 starLayer(vec3 dir, float scale, float cut, float size, float bright) {
   return sum * bright;
 }
 
-vec3 skyColour(vec3 dir) {
+vec3 skyColour(vec3 dir, float footRad) {
   vec3 col = vec3(0.0);
   if (uStarBrightness > 0.0) {
     // The densities are 1.64x the naive area scaling: the 3x3x3 sweep this
     // replaces spanned three radial shells of the lattice and drew stars from
     // all of them, so eight cells over two shells needs the extra to land on
     // the same star count. Measured against the old render, not guessed.
-    col += starLayer(dir, 65.0, 0.0275, 0.25, 1.0);
-    col += starLayer(dir, 160.0, 0.0066, 0.20, 0.75);
-    col += starLayer(dir, 360.0, 0.00118, 0.16, 0.5);
+    col += starLayer(dir, 65.0, 0.0275, 0.25, 1.0, footRad * 65.0);
+    col += starLayer(dir, 160.0, 0.0066, 0.20, 0.75, footRad * 160.0);
+    col += starLayer(dir, 360.0, 0.00118, 0.16, 0.5, footRad * 360.0);
     col *= uStarBrightness;
   }
 
@@ -351,10 +361,14 @@ bool hitBodies(vec3 a, vec3 bq, inout vec3 accum, inout float trans) {
   return hit;
 }
 
-vec3 trace(vec3 ro, vec3 rd, float jitter) {
+vec3 trace(vec3 ro, vec3 rd, float jitter, out vec3 skyDir, out float skyWeight) {
   vec3 accum = vec3(0.0);
   float trans = 1.0;
   float radio = 0.0;   // optically thin intensity, for the synchrotron mode
+  // Default to the undeflected ray: neighbouring pixels that never escape
+  // still need something continuous here for the derivative to be usable.
+  skyDir = rd;
+  skyWeight = 0.0;
 
   float r0 = length(ro);
   vec3 e1 = ro / r0;
@@ -365,7 +379,8 @@ vec3 trace(vec3 ro, vec3 rd, float jitter) {
   if (sinPsi < 1e-6) {
     // Exactly radial: no bending and no plane to cross.
     if (uEmission > 0.5) return vec3(0.0);
-    return cosPsi < 0.0 ? vec3(0.0) : skyColour(rd);
+    if (cosPsi >= 0.0) skyWeight = 1.0;
+    return vec3(0.0);
   }
 
   vec3 N = cr / sinPsi;
@@ -505,7 +520,9 @@ vec3 trace(vec3 ro, vec3 rd, float jitter) {
       // Starlight is blueshifted on the way down to the observer.
       float blue = 1.0 / sqrt(max(1e-4, 1.0 - 2.0 / r0));
       if (uEmission > 0.5) return vec3(radio * uGain);
-      return accum + trans * skyColour(normalize(out3)) * mix(1.0, blue * blue, uRedshift);
+      skyDir = normalize(out3);
+      skyWeight = trans * mix(1.0, blue * blue, uRedshift);
+      return accum;
     }
     if (uEmission < 0.5 && trans < 0.010) return accum;
   }
@@ -527,12 +544,25 @@ void main() {
   // as grain rather than as concentric bands.
   float jitter = 0.18 + 0.64 * hash13(vec3(gl_FragCoord.xy, 1.0));
 
+  vec3 skyDir;
+  float skyWeight;
+  vec3 col = trace(uCamPos, rd, jitter, skyDir, skyWeight);
+
   if (uEmission > 0.5) {
     // Raw scalar intensity. The beam convolution and the false-colour map are
     // separate passes, so that the blur happens before the colouring.
-    outColor = vec4(trace(uCamPos, rd, jitter), 1.0);
+    outColor = vec4(col, 1.0);
     return;
   }
-  outColor = vec4(trace(uCamPos, rd, jitter) * uGain, 1.0);
+
+  if (skyWeight > 0.0) {
+    // How much sky this pixel covers, measured here in main rather than deep
+    // inside the loop, because screen-space derivatives are only meaningful
+    // in uniform control flow. Clamped because the map folds at the shadow
+    // edge and neighbouring pixels can land arbitrarily far apart.
+    float foot = 0.5 * (length(dFdx(skyDir)) + length(dFdy(skyDir)));
+    col += skyWeight * skyColour(skyDir, min(foot, 0.08));
+  }
+  outColor = vec4(col * uGain, 1.0);
 }
 `;
