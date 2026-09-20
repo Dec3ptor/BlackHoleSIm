@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { vertexShader, fragmentShader, MAX_BODIES } from './lensingShader.js';
 import { buildBlackbodyLut } from '../core/blackbody.js';
+import { createNoiseTexture } from './noiseTexture.js';
 import { particlePosition, renderDiscTemperature } from '../sim/simulation.js';
 
 export function createBlackHoleView() {
@@ -56,6 +57,7 @@ export function createBlackHoleView() {
     uBodyPos: { value: Array.from({ length: MAX_BODIES }, () => new THREE.Vector4()) },
     uBodyCol: { value: Array.from({ length: MAX_BODIES }, () => new THREE.Vector4(1, 1, 1, 6000)) },
 
+    uNoise: { value: createNoiseTexture() },
     uBlackbody: { value: lutTex },
     uBBRange: { value: new THREE.Vector2(lut.logMin, lut.logMax) },
     uGain: { value: 1 },

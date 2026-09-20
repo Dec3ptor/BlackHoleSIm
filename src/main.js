@@ -123,7 +123,12 @@ const drawingSize = new THREE.Vector2();
 function resize() {
   const w = container.clientWidth;
   const h = Math.max(1, container.clientHeight);
-  const pr = Math.min(window.devicePixelRatio || 1, 2) * state.quality.renderScale;
+  // A Retina display reports devicePixelRatio 2, which means four times the
+  // pixels and four times the ray tracing. Capping it is the single biggest
+  // lever on a laptop, and this render - smooth gradients under bloom - hides
+  // the softening far better than text or geometry would.
+  const cap = Math.min(window.devicePixelRatio || 1, state.quality.maxPixelRatio);
+  const pr = cap * state.quality.renderScale;
   renderer.setPixelRatio(pr);
   renderer.setSize(w, h, false);
   composer.setPixelRatio(pr);
@@ -296,8 +301,15 @@ function frame(now) {
     sinceAdapt = 0;
     const q = state.quality;
     const before = q.renderScale;
-    if (smoothedFrame > 26 && q.renderScale > 0.4) q.renderScale = Math.max(0.4, q.renderScale - 0.08);
-    else if (smoothedFrame < 15 && q.renderScale < 1) q.renderScale = Math.min(1, q.renderScale + 0.05);
+    if (smoothedFrame > 26 && q.renderScale > 0.35) {
+      // Step down in proportion to how far over budget we are, so a badly
+      // struggling machine reaches a usable frame rate in one or two goes
+      // rather than crawling there over several seconds.
+      const over = Math.min(smoothedFrame / 26, 4);
+      q.renderScale = Math.max(0.35, q.renderScale - 0.05 * over);
+    } else if (smoothedFrame < 15 && q.renderScale < 1) {
+      q.renderScale = Math.min(1, q.renderScale + 0.05);
+    }
     if (Math.abs(q.renderScale - before) > 1e-3) { resize(); panel.refresh(); }
   }
 

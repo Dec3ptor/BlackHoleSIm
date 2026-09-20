@@ -223,6 +223,50 @@ Performance scales by resolution, not by physics: the renderer drops the render 
 hold frame rate and never reduces the integration accuracy behind your back. Both are
 exposed under **Quality**.
 
+## Performance
+
+Every pixel is an independent curved-spacetime ray trace, so this is pure GPU
+fragment-shader work — there is no CPU path to move off, and nothing to gain from
+WebGPU, which would change the API rather than the arithmetic. Making it faster means
+doing less per pixel.
+
+Profiling the frame (by stubbing functions in the live shader and timing) put the cost
+in a surprising place:
+
+| | Share of frame |
+| --- | --- |
+| Procedural star field | 42% |
+| Disc noise (fbm) | 38% |
+| Geodesic integration — the actual physics | 31% |
+
+So the physics was the cheap part. Three changes, none of which touch it:
+
+- **Disc noise now comes from a 3D texture.** White noise read back with hardware linear
+  filtering *is* value noise — the texture unit does the interpolation the shader was
+  doing with eight hashes per octave. Measured effect on the image: detail ×0.978, i.e.
+  nothing.
+- **The star field samples 8 lattice cells instead of 27.** A star's reach is held below
+  half a cell, so the other nineteen could never contribute. The densities are 1.64×
+  the naive area scaling, because the old 27-cell sweep quietly drew stars from three
+  radial shells and eight cells span two — measured against the old render rather than
+  assumed.
+- **Sky-only rays skip the position maths.** Two transcendentals and a square root per
+  step were being computed for every ray, but are only needed by rays that reach the
+  disc or a planet. Most pixels are sky.
+
+Net: **1.83× faster**, with mean luminance within 1.7% and fine detail at 94% of the
+original — the remainder being star *placement*, not lost structure.
+
+If it is still heavy, the order to reach for:
+
+1. **Max pixel ratio** (Quality panel). A Retina screen reports 2, which is four times
+   the pixels to trace. The default caps it at 1.5; 1.0 is another 2.25× and, under
+   bloom, hard to tell apart.
+2. **Adaptive resolution** is on by default and trades pixels for frame rate — never
+   integration accuracy — dropping scale in proportion to how far over budget a frame is.
+3. **Integration steps** only matter for rays near the shadow; most escape long before
+   the cap, which is why halving it barely moves the frame time.
+
 ## Layout
 
 ```

@@ -150,6 +150,7 @@ export const DEFAULTS = {
     steps: 300,
     stepScale: 1,
     renderScale: 0.85,
+    maxPixelRatio: 1.5,
     adaptive: true,
   },
 

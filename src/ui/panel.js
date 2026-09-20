@@ -317,6 +317,13 @@ export function buildPanel(root, state, onChange) {
     label: 'Render scale', path: 'quality.renderScale', min: 0.35, max: 1, step: 0.05, change: 'quality',
     format: (v) => `${(v * 100).toFixed(0)}%`,
   });
+  slider(quality, {
+    label: 'Max pixel ratio', path: 'quality.maxPixelRatio', min: 0.75, max: 3, step: 0.05, change: 'quality',
+    format: (v) => `${v.toFixed(2)} ×`,
+    hint: 'A Retina screen reports 2, which is four times the pixels to trace. '
+      + 'Lowering this is the cheapest way to gain frame rate; raise it for a '
+      + 'crisper still.',
+  });
   toggle(quality, { label: 'Adaptive resolution', path: 'quality.adaptive' });
 
   return { refresh: () => refreshers.forEach((f) => f()) };
